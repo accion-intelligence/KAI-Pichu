@@ -1,0 +1,33 @@
+[project]
+name = "kai-light"
+version = "0.1.0"
+description = "Single-operator GPU optimization with calibrated benchmarks and an agent optimization loop."
+readme = "README.md"
+license = "Apache-2.0 AND MIT"
+license-files = ["LICENSE", "licenses/*", "THIRD_PARTY_NOTICES.md"]
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2,<3", "PyYAML>=6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+kai-light = "kai_light.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"kai_light" = ["*.md"]
+"kai_light.benchmark" = ["*.md", "templates/**/*"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["**/__pycache__/*", "**/*.pyc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,9 @@
+include README.md CONTRIBUTING.md THIRD_PARTY_NOTICES.md requirements.txt
+recursive-include licenses *
+recursive-include docs *.md
+recursive-include configs *.yaml
+recursive-include examples *.py *.cu *.cuh *.h *.yaml *.json *.md *.txt
+recursive-include tests *.py
+recursive-include scripts *.py
+global-exclude *.pyc
+global-exclude __pycache__

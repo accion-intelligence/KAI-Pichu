@@ -1,0 +1,31 @@
+# Task: layernorm_fwd_1024
+
+## Description
+
+Implement a CUDA kernel for LayerNorm forward pass.
+
+Given input x of shape (rows, cols), weight gamma and bias beta of shape (cols,):
+  mu[i] = mean(x[i, :])
+  rs[i] = rsqrt(var(x[i, :]) + eps)
+  z[i, j] = (x[i, j] - mu[i]) * rs[i] * gamma[j] + beta[j]
+
+Dimensions: rows=16384, cols=1024, eps=1e-05
+
+
+## Function Signature
+
+```c
+void launch_layernorm_forward(
+    const float* x,       // [rows, cols] input
+    const float* gamma,   // [cols] scale weight
+    const float* beta,    // [cols] bias weight
+    float* z,             // [rows, cols] normalized output
+    float* mu,            // [rows] per-row mean
+    float* rs,            // [rows] per-row reciprocal std
+    int rows,
+    int cols,
+    float eps,
+    cudaStream_t stream
+);
+
+```

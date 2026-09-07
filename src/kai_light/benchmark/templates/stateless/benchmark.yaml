@@ -1,0 +1,21 @@
+schema_version: 1
+name: vector_add
+description: Elementwise FP32 addition, including output allocation and excluding input creation.
+adapter: adapter.py:Task
+implementation:
+  root: .
+  files: [solution.py]
+objective:
+  metric: latency_ms
+  unit: ms
+  direction: minimize
+  scope: module
+measurement:
+  timer: wall
+  boundary: One vector addition including dispatch and output allocation; inputs and validation excluded.
+  cache_policy: Reuse input buffers after warmup; this models a warm repeated operator.
+options:
+  device: cpu
+  size: 4096
+  atol: 0.000001
+  rtol: 0.00001

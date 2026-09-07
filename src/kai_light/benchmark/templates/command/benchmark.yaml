@@ -1,0 +1,21 @@
+schema_version: 1
+name: native_program
+description: Run a native executable that computes y=x*x+1, including process launch and input/output transfer.
+adapter: adapter.py:Task
+implementation:
+  root: .
+  files: [solution.cu]
+objective:
+  metric: latency_ms
+  unit: ms
+  direction: minimize
+  scope: end_to_end
+measurement:
+  timer: wall
+  boundary: Complete subprocess request including launch, parsing, computation, synchronization, and output; compilation excluded.
+  cache_policy: New process for every invocation; operating-system caches remain uncontrolled and warm.
+options:
+  compiler: c++
+  compile_flags: [-O2, -x, c++]
+  size: 64
+  timeout_s: 30

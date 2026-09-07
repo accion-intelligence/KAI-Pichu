@@ -1,0 +1,16 @@
+{
+  "project": "CudaForge",
+  "repository": "https://github.com/OptimAI-Lab/CudaForge",
+  "commit": "eaba693fa01bdafc9848334cada2d789e240ce3f",
+  "license": "MIT",
+  "source_files": {
+    "main.py": "31176ba7e52cff9dbc00cb8d237a3a9e07eb950bb7c63a6996d8661aa4cd5fcb",
+    "scripts/individual.py": "4740a4a799172e8ed8b90c3f98c3b0351f4f0d6249236ec1008ef0ca602851c1",
+    "prompts/judger_repair.py": "f33bcd2a4dbae86061645e8dff4af63dfb9fa21f14521c1e2b1bdcc14a23533e",
+    "prompts/judger_optimization.py": "9b7988c3881d5f230974dad8e8fee198ec590f794c873856a79832b8b1469eb6",
+    "prompts/optimization.py": "51cd4a0ed62a62d4a076dbc96a28848f41f7fe26f3c38846a6065f536bc5c541",
+    "utils/kernel_io.py": "181275690b9299f919d71d770a051322165b526cc4f146fd28bf2622706dd12b",
+    "run_ncu.py": "d36dfefd6137affdb352b6f5049a5e28bd7e2ada337bf65deddfba4c12255916"
+  },
+  "integration": "Modified source port of the single-task generation/repair/optimization loop, individual state and judge strategy. Benchmark, process, workspace, transport and profiler boundaries replaced with KAI-light interfaces."
+}

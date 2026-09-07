@@ -1,0 +1,43 @@
+schema_version: 1
+name: layernorm_fwd_1024_graph_events_v3
+description: FP32 LayerNorm forward, 16384 rows by 1024 columns,
+  including z, mean and reciprocal standard deviation.
+adapter: adapter.py:LayerNorm
+implementation:
+  root: baseline
+  files:
+  - solution.cu
+benchmark_files:
+- bridge.cu
+- upstream/*.*
+- upstream/layer_norm/*
+objective:
+  metric: operator_latency_ms
+  unit: ms
+  direction: minimize
+  scope: kernel
+  max_case_regression: 0.01
+measurement:
+  timer: cuda_event
+  device: 0
+  warmup: 5
+  blocks: 40
+  iterations: 5
+  confidence: 0.95
+  bootstrap_samples: 5000
+  calibration_tolerance: 0.005
+  boundary: GPU elapsed time between two external CUDA event record nodes captured
+    around exactly one complete native operator in the same CUDA Graph. Graph submission,
+    compilation, input/output allocation, reset and validation are excluded. The SDK
+    also records its outer latency_ms as a diagnostic; only operator_latency_ms is
+    scored.
+  cache_policy: Before every invocation, poison outputs and write a separate 256 MiB
+    buffer, following the original benchmark's L2-thrashing policy. Input buffers
+    are reused. No profiler or clock locking.
+seed: 0
+options:
+  device: cuda:0
+  nvcc: nvcc
+  cuda_arch: sm_120
+  compile_timeout_seconds: 300
+  execution: graph_events

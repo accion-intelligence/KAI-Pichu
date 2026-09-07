@@ -1,0 +1,49 @@
+schema_version: 1
+task_id: class2/general/layernorm_fwd_1024
+name: layernorm_fwd_1024
+task_class: 2
+domain: ml
+tags:
+- layernorm
+- forward
+hardware:
+  min_sm: 80
+  tested_sms:
+  - 80
+  required_features: []
+runner:
+  backend: class2_defpy
+  workdir: tasks/class2/general/layernorm_fwd_1024
+  timeout_sec: 180
+  env: {}
+  solution_file: solution.cu
+build:
+  cmd: ''
+  clean_cmd: ''
+execute:
+  cmd: ''
+  success:
+    exit_code: 0
+    stdout_regex: ''
+correctness:
+  mode: tensor_compare
+  tolerances:
+    atol: 0.0001
+    rtol: 0.0001
+performance:
+  enabled: true
+  parser: {}
+  metric: speedup_ref_over_sol
+source:
+  repo: Dao-AILab/flash-attention
+  files: []
+  commit: ''
+  license: BSD-3-Clause
+anti_cheat:
+  blocked_patterns:
+  - '#include\s*[<"]ln_fwd'
+  - '#include\s*[<"]ln_bwd'
+  - '#include\s*[<"]ln_parallel'
+  required_patterns:
+  - __global__\s+void
+  - <<<.*>>>

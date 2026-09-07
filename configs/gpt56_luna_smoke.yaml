@@ -1,0 +1,26 @@
+schema_version: 1
+generator:
+  provider: responses
+  base_url: https://api.openai.com/v1
+  model: gpt-5.6-luna
+  api_key_env: OPENAI_API_KEY
+  max_tokens: 16384
+  temperature: null
+  timeout_seconds: 180
+  extra_body:
+    reasoning:
+      effort: high
+budget:
+  rounds: 3
+  llm_calls: 9  # Includes optional judge requests to inspect profile evidence.
+  seconds: 1800
+  evaluation_seconds: 300
+  acceptance_repeats: 2
+resources:
+  gpu_policy: exclusive
+  poll_seconds: 1
+profile:
+  enabled: true
+  ncu: ncu
+  query_rounds: 4
+max_context_chars: 160000

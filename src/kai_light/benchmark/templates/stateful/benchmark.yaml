@@ -1,0 +1,18 @@
+schema_version: 1
+name: recurrent_state
+description: A fixed sequence of scalar recurrence updates, validating outputs and final state.
+adapter: adapter.py:Task
+implementation:
+  root: .
+  files: [solution.py]
+objective:
+  metric: latency_ms
+  unit: ms
+  direction: minimize
+  scope: module
+measurement:
+  timer: wall
+  boundary: One complete sequence of updates; initial state restoration and input generation excluded.
+  cache_policy: Reuse the input sequence; reset state before every invocation, including warmup.
+options:
+  steps: 4096
