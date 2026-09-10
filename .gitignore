@@ -12,3 +12,9 @@ runs/
 *.so
 *.ncu-rep
 *.nsys-rep
+
+# Local preview/build artifacts
+/*.html
+/*.zip
+examples/**/*.html
+scripts/*.mjs
