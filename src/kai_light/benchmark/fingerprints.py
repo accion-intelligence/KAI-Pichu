@@ -7,6 +7,7 @@ digest understands.
 """
 from __future__ import annotations
 
+import ctypes
 import hashlib
 from pathlib import Path
 from typing import Any
@@ -86,15 +87,15 @@ def _feed_file(digest: "hashlib._Hash", path: Path, location: str) -> None:
 
 
 def _feed_tensor(digest: "hashlib._Hash", tensor: Any) -> None:
-    import torch  # Only reached for torch tensors, so the import is available.
-
     detached = tensor.detach()
     _tag(digest, "tensor", (str(detached.dtype), tuple(detached.shape), tuple(detached.stride())))
-    # NumPy cannot represent every torch dtype (bfloat16, for example), so feed
-    # the raw element bytes of a contiguous host copy instead.
-    raw = detached.cpu().contiguous().reshape(-1)
-    if raw.numel():
-        digest.update(raw.view(torch.uint8).numpy().tobytes())
+    # Hash the raw element bytes of a contiguous host copy through a ctypes view.
+    # This needs neither NumPy (absent from CPU-only torch installs) nor a
+    # per-element copy, and it covers every dtype, bfloat16 included.
+    host = detached.cpu().contiguous()
+    nbytes = host.numel() * host.element_size()
+    if nbytes:
+        digest.update(memoryview((ctypes.c_ubyte * nbytes).from_address(host.data_ptr())))
 
 
 def _feed_array(digest: "hashlib._Hash", array: Any) -> None:
