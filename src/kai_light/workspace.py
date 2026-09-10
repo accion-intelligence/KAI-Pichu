@@ -30,7 +30,12 @@ class Workspace:
         if root.resolve().is_relative_to(manifest.parent) or root.resolve().is_relative_to(baseline):
             raise ValueError("run directory must be outside the task and implementation directories")
         task_files = file_inventory(manifest.parent, [
-            manifest.name, spec.adapter.rsplit(":", 1)[0], *spec.benchmark_files])
+            manifest.name, spec.adapter.rsplit(":", 1)[0], *spec.benchmark_files, *spec.agent_files])
+        for name in file_inventory(manifest.parent, spec.agent_files):
+            try:
+                (manifest.parent / name).read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                raise ValueError(f"agent_files must be UTF-8 text the model can read: {name}") from None
         implementation_files = file_inventory(baseline, spec.implementation.files)
         if any(name == "_baseline" or name.startswith("_baseline/") for name in task_files):
             raise ValueError("_baseline is reserved for the frozen implementation")
@@ -63,7 +68,8 @@ class Workspace:
         # created by adapters. Owners must declare all oracle/build helpers.
         return json_fingerprint({
             "benchmark": file_inventory(self.bundle, [
-                self.manifest.name, self.spec.adapter.rsplit(":", 1)[0], *self.spec.benchmark_files]),
+                self.manifest.name, self.spec.adapter.rsplit(":", 1)[0],
+                *self.spec.benchmark_files, *self.spec.agent_files]),
             "implementation": file_inventory(self.baseline, self.spec.implementation.files),
         })
 
@@ -107,12 +113,14 @@ class Workspace:
         baseline = self.sources(self.baseline)
         if sum(map(len, baseline.values())) > max_chars // 2:
             raise ValueError("implementation exceeds context limit; increase max_context_chars")
+        # The agent sees the manifest, the editable sources and only the files the
+        # task owner listed in agent_files. The adapter, oracle and input generation
+        # stay hidden so candidates cannot specialize to the test distribution.
         task_files = {}
         remaining = max_chars // 2
-        names = [self.spec.adapter.rsplit(":", 1)[0]]
-        names += sorted(file_inventory(self.bundle, self.spec.benchmark_files)) if self.spec.benchmark_files else []
-        for name in dict.fromkeys(names):
-            data = (self.bundle / name).read_text(encoding="utf-8", errors="replace")
+        names = sorted(file_inventory(self.bundle, self.spec.agent_files)) if self.spec.agent_files else []
+        for name in names:
+            data = (self.bundle / name).read_text(encoding="utf-8")
             task_files[name] = data[:remaining]
             if len(data) > remaining:
                 task_files[name] += "\n[context limit: remaining file content omitted]"

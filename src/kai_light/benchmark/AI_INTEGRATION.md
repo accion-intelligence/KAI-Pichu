@@ -50,6 +50,19 @@ Required manifest fields are `name`, `description`, `adapter`, `implementation`,
 authoritative. Include every implementation build source in
 `implementation.files`. Include additional adapter/oracle helpers and task
 documents in `benchmark_files`; the manifest and adapter are recorded automatically.
+Author the adapter, input synthesis and oracle in a context that has never seen a
+candidate implementation and is never reused to write one. The optimizer enforces
+the same separation at run time: its generator and judge see only `agent_files`.
+Never adjust inputs, tolerances or the oracle in response to a failing candidate;
+fix the candidate or, if the task is wrong, re-author the task and restart the run.
+Value ranges and distributions are the task owner's decision; the framework does
+not impose any.
+
+List in `agent_files` only the text the optimization agent may read: ABI headers,
+interface stubs and task descriptions. The agent never sees the adapter, the
+oracle or input generation, so it cannot specialize candidates to the test
+distribution. Semantics, shapes, tolerances and constraints the agent needs must
+appear in the manifest description or in an `agent_files` document.
 Do not include generated build artifacts or output reports in source globs.
 
 Use `options` for task-specific paths, dtypes, device strings, data identities,
@@ -69,11 +82,17 @@ Subclass `kai_light.benchmark.Benchmark` and implement:
 | --- | --- |
 | `cases(split)` | Deterministic non-empty iterable of `Case(id, params, weight, work_units)`; IDs unique within the split |
 | `prepare(case, seed)` | Construct inputs and initial state; no candidate implementation needed |
-| `fingerprint(fixture)` | Digest actual input content, shape/dtype/layout and relevant initial state; exclude scratch/output |
 | `load_implementation(workspace)` | Build/load the actual files under the supplied root; support distinct baseline and candidate roots |
 | `run(implementation, fixture)` | Complete one declared workload; return `Observation(output, metrics={})` |
 | `validate(case, fixture, observation)` | Return `Validation(passed, message, errors={})`; check all required semantics |
 | `invalid_observations(case, fixture, valid)` | At least one incorrect output per case that this verifier MUST reject |
+
+The SDK digests the fixture itself to check that preparation is reproducible and
+that reset restores the inputs. The default covers scalars, strings, bytes, file
+paths (by content), nested containers, NumPy arrays and PyTorch tensors. Override
+`fingerprint(fixture)` only when the fixture also carries scratch or output
+buffers, or objects the default cannot digest; digest the inputs and initial
+state, never uninitialized scratch.
 
 Override `reset(implementation, fixture)` for mutable state. It runs before every
 invocation, including warmups. A multi-step training/decode workload should run

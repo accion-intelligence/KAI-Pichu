@@ -180,6 +180,11 @@ metadata, available timer/device metadata, raw A/A and A/B samples, intervals,
 constraints, and verdict. Any declared source/benchmark change during execution
 invalidates the result. There is no automatic correction by dividing away A/A bias.
 
+`agent_files` names the text files exposed to the optimization agent (interfaces,
+descriptions). It excludes the adapter, oracle and input generation by design, and
+the manifest rejects an `agent_files` entry that matches the adapter. Input synthesis
+belongs to a context that never sees candidate code; the framework does not prescribe
+value ranges or distributions.
 Declare all adapter/helper files in `benchmark_files` (manifest and adapter are
 automatic), all implementation build sources in `implementation.files`, and
 external dataset/weight content hashes through input fingerprints. Explicitly

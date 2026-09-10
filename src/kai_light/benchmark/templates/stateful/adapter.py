@@ -5,7 +5,7 @@ from pathlib import Path
 import random
 from typing import Any, Iterable
 
-from kai_light.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
+from kai_light.benchmark import Benchmark, Case, Observation, Validation, load_python_file
 
 
 class Task(Benchmark):
@@ -24,9 +24,6 @@ class Task(Benchmark):
             state = 0.75 * state + value
             expected.append(state)
         return {"inputs": inputs, "initial": initial, "state": [initial], "expected": expected}
-
-    def fingerprint(self, fixture: dict[str, Any]) -> str:
-        return json_fingerprint({key: fixture[key] for key in ("inputs", "initial", "state")})
 
     def load_implementation(self, workspace: Path) -> Any:
         return load_python_file(workspace / "solution.py")

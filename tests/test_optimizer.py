@@ -749,3 +749,30 @@ def test_feedback_reports_adapter_objective_metric_per_case_and_arm():
     assert objective["unscored_recorded_metrics"] == ["latency_ms"]
     assert result["comparison"]["overall"] == {"speedup": 1.13, "interval": [1.12, 1.14]}
     assert "objective" not in feedback({"status": "error", "message": "build failed"})
+
+
+def test_agent_context_exposes_only_declared_agent_files(task):
+    manifest, config, output = task
+    spec = yaml.safe_load(manifest.read_text())
+    (manifest.parent / "INTERFACE.md").write_text("forward(a, b) returns a + b\n")
+    (manifest.parent / "oracle.py").write_text("SECRET_INPUTS = [1, 2, 3]\n")
+    spec["benchmark_files"] = ["oracle.py", "INTERFACE.md"]
+    spec["agent_files"] = ["INTERFACE.md"]
+    manifest.write_text(yaml.safe_dump(spec))
+    assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output), "--dry-run"]) == 0
+    context = json.loads((output / "plan.json").read_text())["context"]
+    assert list(context["task_sources"]) == ["INTERFACE.md"]
+    assert "adapter.py" not in context["task_sources"] and "oracle.py" not in context["task_sources"]
+    assert "SECRET_INPUTS" not in json.dumps(context)
+    # Agent-visible files are part of the frozen contract.
+    assert (output / "bundle/INTERFACE.md").exists() and (output / "bundle/oracle.py").exists()
+
+
+def test_agent_files_must_be_readable_text(task):
+    manifest, config, output = task
+    spec = yaml.safe_load(manifest.read_text())
+    (manifest.parent / "weights.bin").write_bytes(b"\xff\xfe\x00binary")
+    spec["agent_files"] = ["weights.bin"]
+    manifest.write_text(yaml.safe_dump(spec))
+    assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output), "--dry-run"]) == 2
+    assert not output.exists()

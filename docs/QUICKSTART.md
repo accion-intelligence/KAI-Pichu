@@ -43,7 +43,8 @@ Available templates: `stateless`, `stateful`, and `command` (external-command wo
 Important API contracts:
 
 - `cases(split)` supplies the cases for `smoke`, `search`, or `acceptance`.
-- `prepare(case, seed)` creates a reproducible fixture; `fingerprint(fixture)` identifies its inputs and initial state.
+- `prepare(case, seed)` creates a reproducible fixture. The SDK digests it automatically; override `fingerprint(fixture)` only to exclude scratch or output buffers.
+- `agent_files` in the manifest lists the interface and description files the optimization agent may read. The adapter, the reference and input generation are never shown to the agent.
 - `load_implementation(workspace)` loads the baseline or candidate implementation.
 - `run(implementation, fixture)` returns an `Observation`.
 - `validate(case, fixture, observation)` returns a `Validation`.

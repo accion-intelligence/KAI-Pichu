@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from .fingerprints import fixture_fingerprint
 from .models import BenchmarkSpec, Case
 
 
@@ -55,9 +56,15 @@ class Benchmark(ABC):
         identity, or in the implementation handle, and reset before every call.
         """
 
-    @abstractmethod
     def fingerprint(self, fixture: Any) -> str:
-        """Hash input values/layout and initial state (exclude scratch/output)."""
+        """Digest the prepared inputs and initial state.
+
+        The default digests the whole fixture: scalars, strings, bytes, file
+        paths by content, nested containers, NumPy arrays and PyTorch tensors.
+        Override it only when the fixture also carries scratch or output
+        buffers, or objects the default cannot digest (UnsupportedFixtureValue).
+        """
+        return fixture_fingerprint(fixture)
 
     @abstractmethod
     def load_implementation(self, workspace: Path) -> Any:

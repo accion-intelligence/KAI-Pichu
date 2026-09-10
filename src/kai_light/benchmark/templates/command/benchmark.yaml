@@ -5,6 +5,7 @@ adapter: adapter.py:Task
 implementation:
   root: .
   files: [solution.cu]
+agent_files: []  # Interface/description files the agent may read; never oracle or input code.
 objective:
   metric: latency_ms
   unit: ms

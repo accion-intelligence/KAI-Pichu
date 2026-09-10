@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from typing import Any, Iterable
 
-from kai_light.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint
+from kai_light.benchmark import Benchmark, Case, Observation, Validation
 
 
 class Task(Benchmark):
@@ -19,9 +19,6 @@ class Task(Benchmark):
     def prepare(self, case: Case, seed: int) -> list[int]:
         rng = random.Random(seed)
         return [rng.randrange(-100, 100) for _ in range(case.params["n"])]
-
-    def fingerprint(self, fixture: list[int]) -> str:
-        return json_fingerprint(fixture)
 
     def load_implementation(self, workspace: Path) -> Any:
         directory = tempfile.TemporaryDirectory(prefix="kai-native-")

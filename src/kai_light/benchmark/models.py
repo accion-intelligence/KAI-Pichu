@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
+from fnmatch import fnmatchcase
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -76,6 +77,9 @@ class BenchmarkSpec(Model):
     adapter: str = Field(description="Relative Python file and class, e.g. adapter.py:Task")
     implementation: ImplementationSpec
     benchmark_files: list[str] = Field(default_factory=list)
+    agent_files: list[str] = Field(default_factory=list, description=(
+        "Text files the optimization agent may read: interfaces, ABI headers, task descriptions. "
+        "Never list input generation, oracle or adapter code; the agent must not learn the test distribution."))
     description: str = Field(min_length=1)
     objective: Objective
     measurement: Measurement
@@ -91,9 +95,12 @@ class BenchmarkSpec(Model):
         path = Path(file_name)
         if path.is_absolute() or ".." in path.parts:
             raise ValueError("adapter must be inside the benchmark directory")
-        for pattern in self.benchmark_files + self.implementation.files:
+        for pattern in self.benchmark_files + self.agent_files + self.implementation.files:
             if Path(pattern).is_absolute() or ".." in Path(pattern).parts:
                 raise ValueError("file patterns must be relative and cannot contain '..'")
+        adapter_path = PurePosixPath(file_name)
+        if any(adapter_path.match(pattern) or fnmatchcase(file_name, pattern) for pattern in self.agent_files):
+            raise ValueError("agent_files cannot include the adapter; input synthesis and the oracle stay hidden from the agent")
         return self
 
 

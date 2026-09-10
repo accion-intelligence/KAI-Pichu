@@ -41,6 +41,10 @@ to their original evidence. See the [AI profiling protocol](../src/kai_light/PRO
 diagnosis and selection. It consumes frozen benchmark contracts and structured SDK
 reports, and keeps candidate state separate from measurement and model transport.
 
+The agent's context holds the manifest, the editable sources and only the files
+listed in `agent_files`. Adapter, oracle and input generation are never shown, so
+a candidate cannot read the test distribution off the benchmark code.
+
 The candidate is a JSON map of complete file replacements. Existing source files
 are the editable allowlist. Missing replacements inherit the selected anchor;
 new files, absolute paths, traversal and benchmark edits are rejected before

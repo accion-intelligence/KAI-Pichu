@@ -5,7 +5,7 @@ from typing import Any, Iterable
 
 import torch
 
-from kai_light.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
+from kai_light.benchmark import Benchmark, Case, Observation, Validation, load_python_file
 
 
 class Task(Benchmark):
@@ -20,11 +20,6 @@ class Task(Benchmark):
         a = torch.randn(case.params["n"], generator=generator, device=device)
         b = torch.randn(case.params["n"], generator=generator, device=device)
         return {"a": a, "b": b, "expected": a + b}
-
-    def fingerprint(self, fixture: dict[str, Any]) -> str:
-        return json_fingerprint({key: {"values": fixture[key].cpu().tolist(),
-                                      "dtype": str(fixture[key].dtype), "stride": list(fixture[key].stride())}
-                                 for key in ("a", "b")})
 
     def load_implementation(self, workspace: Path) -> Any:
         return load_python_file(workspace / "solution.py")

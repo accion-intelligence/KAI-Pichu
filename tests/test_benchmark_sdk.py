@@ -26,8 +26,6 @@ class Task(Benchmark):
         return [Case(id="one", params={"x": 3}), Case(id="two", params={"x": 7}, weight=2)]
     def prepare(self, case, seed):
         return {"x": case.params["x"] + seed, "state": 0}
-    def fingerprint(self, fixture):
-        return json_fingerprint(fixture)
     def load_implementation(self, workspace):
         return load_python_file(workspace / "solution.py")
     def reset(self, implementation, fixture):
@@ -547,3 +545,56 @@ def test_benchmark_wall_timing_retains_workload_gc_policy():
         return Observation(42)
 
     timer.measure(call, lambda: None)
+
+
+def test_default_fixture_fingerprint_distinguishes_content_type_and_layout(tmp_path):
+    from kai_light.benchmark import fixture_fingerprint
+    assert fixture_fingerprint({"a": 1, "b": [1, 2]}) == fixture_fingerprint({"b": [1, 2], "a": 1})
+    assert fixture_fingerprint([1, 2]) != fixture_fingerprint([2, 1])
+    assert len({fixture_fingerprint(v) for v in (1, 1.0, True, "1", b"1", None)}) == 6
+    assert fixture_fingerprint((1, 2)) != fixture_fingerprint([1, 2])
+    data = tmp_path / "weights.bin"; data.write_bytes(b"\x00\x01")
+    same = tmp_path / "copy.bin"; same.write_bytes(b"\x00\x01")
+    assert fixture_fingerprint(data) == fixture_fingerprint(same)
+    data.write_bytes(b"\x00\x02")
+    assert fixture_fingerprint(data) != fixture_fingerprint(same)
+
+
+def test_default_fixture_fingerprint_names_unsupported_objects_and_accepts_hooks():
+    from kai_light.benchmark import UnsupportedFixtureValue, fixture_fingerprint
+
+    class Opaque:
+        pass
+
+    class Described:
+        def __fixture_fingerprint__(self):
+            return "weights-v3"
+
+    with pytest.raises(UnsupportedFixtureValue, match=r"fixture\['scratch'\]\[0\] holds .*Opaque"):
+        fixture_fingerprint({"scratch": [Opaque()]})
+    assert fixture_fingerprint({"model": Described()}) == fixture_fingerprint({"model": Described()})
+
+
+def test_default_fixture_fingerprint_covers_tensor_values_shape_and_stride():
+    torch = pytest.importorskip("torch")
+    from kai_light.benchmark import fixture_fingerprint
+    a = torch.arange(6, dtype=torch.float32)
+    assert fixture_fingerprint(a) == fixture_fingerprint(a.clone())
+    assert fixture_fingerprint(a) != fixture_fingerprint(a.view(2, 3))
+    assert fixture_fingerprint(a.view(2, 3)) != fixture_fingerprint(a.view(2, 3).t().contiguous().t())
+    assert fixture_fingerprint(a) != fixture_fingerprint(a.to(torch.float64))
+    assert fixture_fingerprint(torch.zeros(3, dtype=torch.bfloat16)) != fixture_fingerprint(torch.ones(3, dtype=torch.bfloat16))
+    assert fixture_fingerprint(torch.empty(0)) == fixture_fingerprint(torch.empty(0))
+
+
+def test_manifest_rejects_adapter_in_agent_files():
+    from pydantic import ValidationError
+    from kai_light.benchmark.models import BenchmarkSpec
+    base = {"name": "t", "description": "d", "adapter": "adapter.py:Task",
+            "implementation": {"files": ["solution.py"]},
+            "objective": {"scope": "kernel", "unit": "ms"},
+            "measurement": {"timer": "wall", "boundary": "b", "cache_policy": "c"}}
+    BenchmarkSpec.model_validate({**base, "agent_files": ["INTERFACE.md", "bridge.cu"]})
+    for pattern in (["adapter.py"], ["*.py"], ["INTERFACE.md", "adapter.py"]):
+        with pytest.raises(ValidationError, match="agent_files cannot include the adapter"):
+            BenchmarkSpec.model_validate({**base, "agent_files": pattern})
