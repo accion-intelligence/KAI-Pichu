@@ -39,6 +39,8 @@ The stable import surface is `kai_light.benchmark`:
   actual distribution; a random seed alone does not establish representativeness.
 - `Observation`: opaque output plus optional named numeric metrics.
 - `Validation`: boolean result, explanation, and optional finite numeric errors.
+- `fixture_fingerprint`: the default content digest of a prepared fixture, covering
+  scalars, strings, bytes, files by content, containers, NumPy arrays and tensors.
 - `json_fingerprint`: canonical SHA-256 for JSON-compatible input descriptions.
 - `load_python_file`: unique leaf-module loading without stale bytecode.
 
@@ -78,8 +80,9 @@ iterator is not completed work; consume it inside `run`.
 
 The SDK checks reset fingerprints during conformance and warmup, not directly
 before timed calls: hashing GPU data would itself change cache conditions.
-The fingerprint must cover actual input values/layout and mutable initial state,
-or equivalent content digests, excluding uninitialized scratch/output buffers.
+The SDK digests the fixture itself; an adapter overrides `fingerprint` only to
+exclude scratch/output buffers or to describe objects the default cannot digest.
+The digest must cover actual input values/layout and mutable initial state.
 Preparation is repeated to verify deterministic reconstruction. Reset hidden
 model/optimizer/RNG/server state as well as state stored in the fixture.
 

@@ -1,168 +1,150 @@
-# KAI-light
+# KAI Core Agent
 
-KAI-light optimizes **one GPU operator at a time** against a benchmark you own.
-It combines a benchmark SDK with an agent loop for code generation, correctness
-diagnosis, repair and performance optimization.
+### An open-source CUDA kernel agent.
 
-Define your inputs, correctness oracle and optimization metric once. The agent
-edits implementation files; the SDK determines whether each candidate is correct,
-whether measurement is calibrated, and whether the final candidate meets the goal.
+[Get started](#get-started) · [How it works](#how-it-works) · [Documentation](#documentation) · [Research](#research-and-attribution)
 
-## Install
+At Accion Intelligence, we’re building KAI to make GPU engineering accessible from a specification. **KAI Core Agent is our open-source CUDA kernel agent:** it generates, debugs, profiles, and optimizes one GPU operator at a time.
 
-Python 3.10+ on Linux:
+Define what your operator must do, how to check it, and what performance it should beat. The agent generates a candidate, diagnoses failures, repairs the code, investigates performance, and tests the next change. You choose the models, hardware, and budget; the code and experiment records remain yours to inspect and use.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-kai-light --help
-```
+<picture>
+  <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="docs/assets/kai-core-workflow-dark.png">
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/kai-core-workflow-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kai-core-workflow-dark.svg">
+  <img src="docs/assets/kai-core-workflow-light.svg" alt="CUDA kernel engineering workflow: define the task; generate and evaluate candidates; repair failures or diagnose performance with optional NCU feedback; recheck the best eligible candidate after search. Code and experiment records remain inspectable with or without acceptance." width="100%">
+</picture>
 
-[requirements.txt](requirements.txt) pins the framework dependencies and installs
-`kai_light` itself in editable mode. The editable install is not optional:
-evaluations, tests and the NCU worker run as separate `python -m kai_light`
-processes, which fail with an unhelpful `benchmark_error` if the package is
-only on the current process's `sys.path`.
-Install a CUDA-compatible PyTorch and CUDA toolkit for your workload separately.
-The framework itself needs only Pydantic and PyYAML. CPU tests, help and dry runs
-do not require a GPU, a model server, or the parent KAI repository.
-Nsight Compute is optional; its executable and counter permissions must already
-be available if profiling is enabled. The framework never invokes sudo.
-Optional NCU report reading adds metric descriptions, NVIDIA rule findings,
-and source/SASS queries. Without it, profiling retains structured CSV evidence.
-See the [profiling guide](src/kai_light/PROFILE_GUIDE.md), also available from
-an installed wheel through `kai-light profile --guide`.
+## How it works
 
-## Define a benchmark
+**One task. Two feedback loops. A record of the work.**
 
-Give your coding agent the SDK instructions, then adapt a template or existing task:
+- **Generate and repair.** The generator writes the permitted implementation files. Build or correctness failures go to a diagnostic judge, which identifies an issue and proposes a focused repair for the next revision.
+- **Investigate and optimize.** For valid candidates, the judge uses measured performance and, when enabled, Nsight Compute evidence to propose a bottleneck hypothesis and a concrete code change. Feedback includes the scored metric’s measured baseline and candidate values, units, and boundary. It can query captured profile details on demand before deciding.
+- **Keep progress.** The loop retains the best eligible candidate, records hypotheses and results, and works within explicit round, model-call, and time budgets. Interrupted runs can resume under the original configuration.
+- **Recheck the result.** After search completes, the selected candidate is rerun on the acceptance split. Source is marked `accepted` only when every required acceptance run passes.
+
+The agent is an **engineering tool**, not a fixed benchmark or a kernel library. Your task specifies the semantics, baseline, cases, precision, and measurement boundary. A task can launch more than one CUDA kernel; the declared operator boundary is what gets evaluated.
+
+## Get started
+
+Use a Linux GPU environment with Python 3.10+, a CUDA toolchain, and the dependencies required by your operator. Bring your own model endpoint and GPU; NCU profiling is optional.
+
+*Compatibility note: the current source checkout uses the Python module `kai_light`. These commands match that checkout; the product name is KAI Core Agent.*
+
+**1. Install from a source checkout**
+
+From the repository root, in your Python environment:
 
 ```bash
-kai-light benchmark guide
-kai-light benchmark init /tmp/my-operator --template stateless
-kai-light benchmark validate /tmp/my-operator/benchmark.yaml \
-  --checks-only --output /tmp/operator-checks.json
+python -m pip install -e .
+python -m kai_light --help
 ```
 
-The manifest declares input cases, editable implementation files, correctness,
-metric scope, warmup/cache policy and acceptance criteria. The adapter supplies
-the task semantics. Templates cover PyTorch, stateful code and native C++/CUDA.
-For KAI SDK v1 tasks, change imports from `kai.benchmark` to
-`kai_light.benchmark`; the manifest schema and adapter methods are unchanged.
-
-The [LayerNorm example](examples/layernorm/README.md)
-preserves the real `16384 x 1024` FP32 task, original CUDA baseline, independent
-PyTorch oracle and all three outputs. It targets SM120. Its default manifest,
-`benchmark-graph-events.yaml`, scores the operator's own GPU time between two CUDA
-events captured inside the graph. The alternative `benchmark.yaml` times the graph
-replay from the host with outer events, which includes submission gaps and is kept
-for boundary comparison only. For a single operator, use the in-graph boundary.
-
-## Run the optimizer
-
-Copy [configs/optimizer.example.yaml](configs/optimizer.example.yaml) and set
-your model and chat-completions-compatible endpoint. API keys come only from
-the named environment variable, not a checked-in config. A live run checks that
-this variable is set before creating the run directory or starting GPU preflight;
-set `api_key_env: ""` for a local endpoint that needs no key. Generator and judge
-may use the same model or separate configurations.
-For OpenAI's Responses API, set `provider: responses`; see
-[the GPT-5.6 Luna smoke config](configs/gpt56_luna_smoke.yaml). It uses
-`max_output_tokens`, disables server-side response storage, and leaves temperature
-unset while requesting high reasoning effort.
-An installed wheel can also export the template with
-`kai-light config --output optimizer.yaml` or its schema with `--schema`.
-
-The command below loads one key from a dotenv file, selects one physical GPU,
-and writes to a new output directory:
+<details>
+<summary>Optional: check your GPU environment with the packaged LayerNorm task</summary>
 
 ```bash
-python scripts/run_with_env.py --env-file /path/to/.env --gpu GPU-YOUR-UUID -- \
-  optimize examples/layernorm/benchmark-graph-events.yaml \
-  --config configs/gpt56_luna_smoke.yaml --output runs/my-layernorm
+python -m kai_light benchmark validate examples/layernorm/benchmark-graph-events.yaml \
+  --split search --output layernorm-preflight.json
 ```
 
-With your own config and environment variables, the same task runs as:
+This runs task checks, baseline correctness, and A/A calibration using your GPU, with **no model calls**. Add `--checks-only` to skip calibration. It does not test your model endpoint or run the optimization loop.
+
+Use the graph-events manifest above. The example ships a second manifest at a wider measurement boundary; the two are not comparable, and submission-related idle gaps in the wider boundary can prevent A/A calibration from passing. [Which manifest to use →](examples/layernorm/README.md#which-manifest-to-use)
+
+</details>
+
+**2. Define your operator**
+
+Start with your own specification or existing implementation. A runnable task is a **manifest + adapter**: the contract for your operator and the code that prepares inputs, loads implementations, and checks results. Export the authoring guide and schema, then scaffold a task:
 
 ```bash
-export KAI_LIGHT_API_KEY=...
-export CUDA_VISIBLE_DEVICES=0  # choose an idle physical GPU
-
-kai-light optimize examples/layernorm/benchmark-graph-events.yaml \
-  --config configs/optimizer.example.yaml --output runs/first --dry-run
-
-# Inspect runs/first/plan.json, then execute the same frozen task:
-kai-light optimize examples/layernorm/benchmark-graph-events.yaml \
-  --config configs/optimizer.example.yaml --output runs/first --resume
+python -m kai_light benchmark guide --output task-authoring.md
+python -m kai_light benchmark schema --output task-schema.json
+python -m kai_light benchmark init /absolute/path/to/your-task --template stateless
 ```
 
-For immediate execution, omit `--dry-run` on a new output directory.
-`python -m kai_light` exposes the same commands as `kai-light`.
+Adapt the template yourself, or give your coding agent the exported files and this instruction:
 
-Each run contains:
+> Build a task for the operator I describe, following this authoring guide and schema. Include the reference implementation, input cases, numerical requirements, editable CUDA files, and timing boundary. Show me the contract for review before optimization. Do not relax correctness requirements to make a candidate pass.
 
-- `bundle/`: frozen benchmark, oracle/helpers and baseline sources.
-- `candidates/`: separate workspaces containing only declared implementation files.
-- `llm/`: model requests, responses and token usage; no authorization headers.
-- `reports/`: raw SDK results, process logs and GPU occupancy observations.
-- `profiles/`: optional NCU feedback bound to the actual candidate and case.
-- `state.json`: atomic checkpoint and charged budgets.
-- `best_search/` and `best_search.patch`: the best supported search improvement.
-- `accepted/`: created only when every configured independent acceptance run passes.
-- `summary.json`: final status, acceptance result and artifact references.
+[Task setup and exact commands →](docs/QUICKSTART.md#2-define-the-task)
 
-The loop first validates and calibrates the baseline. Incorrect candidates enter
-the judge-and-repair path; correct candidates enter the judge-and-optimize
-path. Hardware feedback profiles the exact source being discussed. A/A failures
-or resource conflicts pause the run instead of asking the model to repair code.
-The performance judge starts with a small NCU overview, then gathers evidence on
-demand: pose a diagnostic question, discover relevant counters, read selected
-fields, and inspect rules or source instructions when needed. Paged results include
-a ready-to-use next query. Responses preserve units, missing-data explanations
-and report identity; repeated reads reuse cached data. Query budgets leave model
-calls for the remaining optimization rounds.
+**3. Configure, run, and inspect**
 
-The default GPU policy checks for other compute processes before, during and
-after each evaluation. It kills only its own evaluation process group on a
-conflict or timeout. This is polling, **not a GPU reservation**: coordinate device
-ownership on shared machines. `resources.gpu_device` explicitly marks GPU-backed
-external-command tasks; in-process CUDA tasks are detected from their timer/device.
-
-## Resume and limits
-
-Use the same config and `--resume` after an interruption, failed model request,
-resource conflict or unstable calibration. The frozen benchmark and saved
-candidates must be unchanged. Rounds and model calls are reserved before work;
-an interrupted round is skipped on resume rather than silently retried. Budgets
-include previous elapsed time, evaluations and model calls. Completed runs need
-a new output directory. Resuming final validation starts a new acceptance set;
-earlier reports remain on disk and do not disappear from the experiment record.
-
-Exit code 0 means the run completed normally or a dry run was prepared; inspect
-`summary.json.final_accepted` before treating a patch as accepted. Exit 1 indicates
-an interrupted/blocked/failed run; exit 2 indicates invocation or configuration
-failure. A valid optimization search may end with `no_improvement` or `not_accepted`.
-
-Adapters and generated native/Python implementations execute as trusted local
-code. Source allowlists and fingerprints protect the experiment contract but
-are **not an OS security sandbox**. Compilation, model-call and overall budgets
-are bounded; arbitrary untrusted tasks need an external isolation layer.
-
-## Development and source provenance
+Export the model configuration, set your endpoint and budget, then start the agent against your reviewed task. The optimizer checks the baseline before making its first generation call.
 
 ```bash
-python -m pip install -r requirements.txt
-python -m pytest -q
-python -m pip wheel --no-deps --no-build-isolation . -w dist
+python -m kai_light config --output optimizer.yaml
+# Edit optimizer.yaml: model, endpoint, key variable, budget; enable NCU if available.
+python -m kai_light optimize /absolute/path/to/your-task/benchmark.yaml \
+  --config optimizer.yaml --output runs/my-operator
 ```
 
-See [architecture](docs/architecture.md), [benchmark contract](docs/benchmark-framework.md),
-and [AI integration instructions](src/kai_light/benchmark/AI_INTEGRATION.md).
+Add `--dry-run` to inspect the plan and frozen task bundle without model calls or GPU workload.
 
-KAI-light draws inspiration from [VeloQ](https://github.com/lucifer1004/veloq).
+[Full setup, credentials, profiling, dry-run and resume →](docs/QUICKSTART.md)
 
-Framework code is distributed under Apache 2.0; components retain their stated
-licenses. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) records source and
-license information. No benchmark dataset, model checkpoint, API credential or
-prior private run is needed for installation.
+## What a run leaves behind
+
+**No accepted candidate does not mean no useful work.** Inspect the attempts, diagnostics, and source changes, not just the final status.
+
+```text
+runs/my-operator/
+├── summary.json        # final status, report links, time and model usage
+├── state.json          # history, best candidate and reserved budgets
+├── bundle/             # frozen task and baseline
+├── candidates/         # generated implementation snapshots
+├── llm/                # model requests, responses and errors
+├── reports/            # evaluation reports and process logs
+├── profiles/           # hardware evidence, when profiling ran
+├── best_search/        # best eligible candidate, if one exists
+├── best_search.patch   # its implementation changes, if one exists
+└── accepted/           # source, only after final acceptance passes
+```
+
+A successful command exit alone does not mean a speedup was accepted. `accepted` means the supplied tests and rules passed. It is not a guarantee about untested inputs, other GPUs, or application-level latency.
+
+## Measurements you can inspect
+
+The benchmark SDK checks correctness against your reference, probes the validator with deliberately invalid observations, calibrates the baseline against itself, and compares candidates using paired measurements with confidence intervals. Final acceptance repeats evaluation on the acceptance split; whether its cases differ from search is determined by your adapter.
+
+The SDK controls built-in timing; adapter-defined metrics require their own boundary review. Failed A/A calibration stops the run rather than triggering code repair. File allowlists and integrity checks help preserve the task, but **this is not a security sandbox**. [Measurement rules and execution risks →](docs/MEASUREMENT.md)
+
+## Documentation
+
+| You want to… | Start here |
+| --- | --- |
+| Define a task and run the agent | [Quickstart](docs/QUICKSTART.md) |
+| Explore the packaged task | [LayerNorm example](examples/layernorm/README.md) |
+| Understand the agent’s decisions and outputs | [Workflow](docs/WORKFLOW.md) |
+| Understand correctness, timing, and acceptance | [Measurement](docs/MEASUREMENT.md) |
+
+## Contributing
+
+Bring a new operator, an interesting failure, a better diagnostic strategy, or results from another GPU. Share the task, environment, relevant logs, and code change, not just a speedup ratio. Remove credentials and proprietary material first. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Research and attribution
+
+The agent builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)**, co-authored by Shiyang Li. Its optimizer source history and retained MIT notices are documented in the repository. The LayerNorm task comes from **[CUDAHercules](https://arxiv.org/abs/2605.08467)** and uses a FlashAttention CUDA baseline.
+
+If these research components support your work, please cite the relevant papers:
+
+```bibtex
+@misc{zhang2025cudaforge,
+  title = {CudaForge: An Agent Framework with Hardware Feedback for CUDA Kernel Optimization},
+  author = {Zijian Zhang and Rong Wang and Shiyang Li and Yuebo Luo and Mingyi Hong and Caiwen Ding},
+  year = {2025},
+  eprint = {2511.01884},
+  archivePrefix = {arXiv}
+}
+```
+
+Framework changes use Apache-2.0; third-party components retain their own licenses. See [LICENSE](LICENSE) and [source and license notices](THIRD_PARTY_NOTICES.md).
+
+---
+
+<sub>**KAI Core** (open · single operator) · **KAI Pipeline** (open · end to end) · **KAI Engine** (managed)</sub>
+
+<sub>Built by [Accion Intelligence](https://github.com/accion-intelligence).</sub>

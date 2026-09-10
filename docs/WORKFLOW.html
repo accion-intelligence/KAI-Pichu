@@ -1,0 +1,54 @@
+<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KAI Core Agent — WORKFLOW</title><style>details{margin:18px 0;padding:12px 16px;border:1px solid var(--line);border-radius:8px}summary{cursor:pointer;font-weight:600}details[open] summary{margin-bottom:12px}:root{color-scheme:light;--bg:#f4f6f9;--paper:#fff;--text:#17283e;--muted:#56677c;--line:#dce3ec;--code:#f4f6f9;--link:#2463ae}html[data-theme=dark]{color-scheme:dark;--bg:#09121e;--paper:#101b2a;--text:#e8eff9;--muted:#b0bfd3;--line:#30445f;--code:#17283a;--link:#8bbdff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.7 -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif}.top{max-width:1080px;margin:auto;padding:19px 24px;display:flex;justify-content:space-between;align-items:center;gap:16px;color:var(--muted);font-size:13px}.top a{font-size:13px}button{border:1px solid var(--line);border-radius:6px;padding:7px 12px;background:var(--paper);color:var(--text);cursor:pointer}main{max-width:1080px;margin:0 auto 60px;padding:46px 58px;background:var(--paper);border:1px solid var(--line);border-radius:12px}h1{font-size:44px;letter-spacing:-1.7px;line-height:1.15;margin:0 0 14px}h2{font-size:26px;line-height:1.3;margin:38px 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line);letter-spacing:-.4px}h3{font-size:21px;margin:12px 0 22px;line-height:1.4}a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}p{margin:15px 0}li{margin:9px 0}pre{overflow:auto;padding:18px 20px;background:var(--code);border:1px solid var(--line);border-radius:8px;font-size:13px;line-height:1.65}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em;background:var(--code);padding:2px 4px;border-radius:3px}pre code{padding:0;background:none;font-size:inherit}blockquote{margin:20px 0;padding:2px 20px;border-left:3px solid var(--link);color:var(--muted)}table{width:100%;border-collapse:collapse;font-size:14px;margin:20px 0}th{text-align:left;background:var(--code)}th,td{padding:12px 14px;border:1px solid var(--line);vertical-align:top}picture{display:block;margin:28px -26px}img{display:block;width:100%;height:auto}html[data-theme=dark] .workflow-light,html[data-theme=light] .workflow-dark{display:none}html[data-theme=dark] .workflow-dark,html[data-theme=light] .workflow-light{display:block}strong{font-weight:650}.table-scroll{overflow-x:auto}@media(max-width:650px){main{padding:25px 20px;border-radius:0;border-left:0;border-right:0}h1{font-size:35px}h2{font-size:23px}picture{margin:22px -10px}table{min-width:580px}.top{padding:12px 20px;flex-wrap:wrap}body{font-size:15px}}</style></head><body><nav class="top"><span><a href="../preview.html">KAI Core Agent</a> · README draft · source-checked, not GPU-tested</span><span><button id="replay" type="button">Replay flow</button> <button id="theme" type="button" aria-label="Toggle color theme">Dark / light</button></span></nav><main><h1 id="inside-the-cuda-kernel-agent">Inside the CUDA kernel agent</h1>
+<p><a href="../preview.html">← README</a></p>
+<p>The agent separates <strong>writing a candidate</strong>, <strong>deciding what to change next</strong>, and <strong>measuring what actually happened</strong>. Generator and judge are model roles; they may use the same model. The benchmark SDK supplies execution and measurement, not an LLM opinion about correctness or speed.</p>
+<h2 id="the-task-comes-first">The task comes first</h2>
+<p>The engineer defines the operator contract and supplies a runnable baseline, inputs, validator, objective, permitted source files, and measurement rules. Task authoring can be assisted by a coding agent using the packaged guide, schema, and templates. The optimizer itself consumes the resulting manifest and adapter.</p>
+<p>A run freezes the task and baseline into its own workspace. Before generating CUDA, it executes the baseline checks and A/A calibration on the search split. A failure here is a task or measurement problem, not evidence that generated code needs repair.</p>
+<h2 id="the-first-candidate">The first candidate</h2>
+<p>The generator receives the task description, current implementation source, hardware context from preflight, and editable-file list. It returns a concrete hypothesis and complete replacement contents for the files it changes. The workspace constructs and evaluates a candidate snapshot. It does not apply generated changes to the original source checkout.</p>
+<h2 id="feedback-loop-1-diagnose-and-repair">Feedback loop 1: diagnose and repair</h2>
+<p>If the current candidate cannot complete evaluation—for example, because it fails to build or fails correctness—the judge receives the current source and actual error feedback. It identifies one critical issue and a minimal fix hint. The generator uses this strategy to create the next candidate.</p>
+<p>This path does not treat a broken candidate as a performance optimization target. Conversely, A/A instability stops the run rather than triggering a code-repair loop.</p>
+<h2 id="feedback-loop-2-investigate-and-optimize">Feedback loop 2: investigate and optimize</h2>
+<p>For valid candidates, the loop starts from the best eligible candidate when one exists. Otherwise it uses the current candidate. The judge receives the source, measurements, and recent hypotheses/results.</p>
+<p>After a completed A/B evaluation, feedback includes the scored metric’s mean, median, minimum, maximum, and sample count for each case and arm, together with its unit, direction, scope, and boundary. Other recorded metrics are identified as unscored. The generator receives this feedback alongside the judge’s strategy. These descriptive statistics do not replace the paired-block speedup or its confidence interval; reports without A/B measurements do not include this summary.</p>
+<p>With profiling enabled, NCU captures the selected implementation and case. The judge starts with a compact evidence overview. It can ask a focused question and query captured metrics, rules, or source-level details, subject to available reader capabilities and query budgets. These queries inspect the existing report; they do not launch new captures to obtain missing counters.</p>
+<p>The judge produces one bottleneck hypothesis, optimization method, and modification plan. The generator applies the plan, and the benchmark evaluates the new candidate. Missing profiling is reported as missing evidence, not invented hardware data. Profiling is optional; ordinary measured feedback still supports the optimization loop.</p>
+<h2 id="progress-and-stopping">Progress and stopping</h2>
+<p>A candidate is retained as the best search result only if the implementation is runnable, the relevant constraints pass, the overall speedup interval’s lower bound exceeds 1, and its point estimate improves on the previous best.</p>
+<p>Rounds, model calls, elapsed time, and evaluation timeouts are bounded. Model calls and rounds are reserved before execution so interruptions do not silently provide a fresh budget. Resume requires the same configuration and a verifiable frozen task; it advances past an interrupted reserved round.</p>
+<p>The current loop runs the configured search rounds, then independently evaluates the best eligible candidate on the acceptance split for the configured number of repeats. Search improvement and final acceptance are separate states. If the time or call budget stops the run first, acceptance is not implied.</p>
+<h2 id="outputs-belong-to-the-engineer">Outputs belong to the engineer</h2>
+<p>Candidates, hypotheses, requests, responses, measurements, optional profiles, and run state remain available for inspection. The best eligible search candidate produces a source export and patch. Successful final acceptance additionally produces <code>accepted/</code>.</p>
+<p>The engineer decides whether those results solve the intended problem and how to integrate the implementation. The agent does not claim application-level gains from an isolated operator result.</p>
+<h2 id="source-map">Source map</h2>
+<p>The diagram groups behavior for readability; it is not a deployment diagram or a security boundary.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Diagram / behavior</th>
+<th>Source at the reviewed commit</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Generation, branching, best candidate, budgets, resume, acceptance</td>
+<td><a href="https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/optimizer/engine.py">OptimizationLoop</a></td>
+</tr>
+<tr>
+<td>Repair diagnosis, performance strategy, on-demand profile questions</td>
+<td><a href="https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/optimizer/prompts.py">Prompts and strategy contract</a></td>
+</tr>
+<tr>
+<td>Evaluation processes, feedback, capture and report queries</td>
+<td><a href="https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/evaluator.py">Evaluator</a></td>
+</tr>
+<tr>
+<td>Input preparation, validation, paired measurement, A/A</td>
+<td><a href="https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/benchmark/runner.py">Benchmark runner</a></td>
+</tr>
+<tr>
+<td>Model, budget, resource and profiling configuration</td>
+<td><a href="https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/config.py">Configuration</a></td>
+</tr>
+</tbody></table></div>
+</main><script>const replay=()=>document.querySelectorAll('picture img').forEach(i=>{i.src=i.src.split('?')[0]+'?replay='+Date.now()});const b=document.getElementById('theme');b.addEventListener('click',()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';replay()});document.getElementById('replay').addEventListener('click',replay);</script></body></html>
