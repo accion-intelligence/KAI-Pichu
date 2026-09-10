@@ -53,7 +53,11 @@ For KAI SDK v1 tasks, change imports from `kai.benchmark` to
 
 The [LayerNorm example](examples/layernorm/README.md)
 preserves the real `16384 x 1024` FP32 task, original CUDA baseline, independent
-PyTorch oracle and all three outputs. It targets SM120 with the supplied manifest.
+PyTorch oracle and all three outputs. It targets SM120. Its default manifest,
+`benchmark-graph-events.yaml`, scores the operator's own GPU time between two CUDA
+events captured inside the graph. The alternative `benchmark.yaml` times the graph
+replay from the host with outer events, which includes submission gaps and is kept
+for boundary comparison only. For a single operator, use the in-graph boundary.
 
 ## Run the optimizer
 
@@ -70,15 +74,26 @@ unset while requesting high reasoning effort.
 An installed wheel can also export the template with
 `kai-light config --output optimizer.yaml` or its schema with `--schema`.
 
+The command below loads one key from a dotenv file, selects one physical GPU,
+and writes to a new output directory:
+
+```bash
+python scripts/run_with_env.py --env-file /path/to/.env --gpu GPU-YOUR-UUID -- \
+  optimize examples/layernorm/benchmark-graph-events.yaml \
+  --config configs/gpt56_luna_smoke.yaml --output runs/my-layernorm
+```
+
+With your own config and environment variables, the same task runs as:
+
 ```bash
 export KAI_LIGHT_API_KEY=...
 export CUDA_VISIBLE_DEVICES=0  # choose an idle physical GPU
 
-kai-light optimize examples/layernorm/benchmark.yaml \
+kai-light optimize examples/layernorm/benchmark-graph-events.yaml \
   --config configs/optimizer.example.yaml --output runs/first --dry-run
 
 # Inspect runs/first/plan.json, then execute the same frozen task:
-kai-light optimize examples/layernorm/benchmark.yaml \
+kai-light optimize examples/layernorm/benchmark-graph-events.yaml \
   --config configs/optimizer.example.yaml --output runs/first --resume
 ```
 
@@ -143,8 +158,7 @@ python -m pip wheel --no-deps --no-build-isolation . -w dist
 ```
 
 See [architecture](docs/architecture.md), [benchmark contract](docs/benchmark-framework.md),
-[AI integration instructions](src/kai_light/benchmark/AI_INTEGRATION.md), and
-[validation status](docs/validation.md).
+and [AI integration instructions](src/kai_light/benchmark/AI_INTEGRATION.md).
 
 KAI-light draws inspiration from [VeloQ](https://github.com/lucifer1004/veloq).
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import shutil
+import statistics
 import sys
 import time
 from typing import Any
@@ -40,11 +41,50 @@ def cuda_device_index(spec: BenchmarkSpec) -> int | None:
     return None
 
 
+def _sample_statistics(values: list[float]) -> dict[str, float | int]:
+    return {"mean": statistics.fmean(values), "median": statistics.median(values),
+            "min": min(values), "max": max(values), "samples": len(values)}
+
+
+def objective_measurements(report: dict[str, Any]) -> dict[str, Any] | None:
+    """Measured values of the scored metric, per case and arm, from the paired A/B records.
+
+    The speedup interval alone hides what was measured. When the benchmark's
+    objective is an adapter metric such as an in-graph operator time, the model
+    must see that metric's own values, not only the SDK's outer latency or NCU
+    replay durations, which have different boundaries and are never scored.
+    """
+    records = report.get("records")
+    spec = report.get("spec")
+    if not records or not spec:
+        return None
+    objective = spec["objective"]
+    metric = objective["metric"]
+    arm_labels = {"a": "baseline", "b": "candidate"}
+
+    samples_by_case: dict[str, dict[str, list[dict[str, float]]]] = {}
+    for row in records:
+        arms = samples_by_case.setdefault(row["case_id"], {label: [] for label in arm_labels.values()})
+        arms[arm_labels[row["arm"]]].extend(row["samples"])
+    per_case = {
+        case_id: {label: _sample_statistics([float(sample[metric]) for sample in samples])
+                  for label, samples in arms.items()}
+        for case_id, arms in sorted(samples_by_case.items())
+    }
+    recorded_metrics = {name for row in records for sample in row["samples"] for name in sample}
+    return {"metric": metric, "unit": objective["unit"], "direction": objective["direction"],
+            "scope": objective["scope"], "boundary": spec["measurement"]["boundary"],
+            "per_case": per_case, "unscored_recorded_metrics": sorted(recorded_metrics - {metric})}
+
+
 def feedback(report: dict[str, Any]) -> dict[str, Any]:
     result = {key: report[key] for key in (
         "status", "error_type", "message", "stdout", "stderr", "acceptance",
         "checks", "candidate_checks", "timing_environment", "process_status", "report_path",
     ) if key in report}
+    objective = objective_measurements(report)
+    if objective is not None:
+        result["objective"] = objective
     for section in ("calibration", "comparison"):
         if section not in report:
             continue

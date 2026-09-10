@@ -1,3 +1,7 @@
+# Outer-event timing boundary, kept for comparison with benchmark-graph-events.yaml.
+# latency_ms is measured from the host around the graph replay and includes submission
+# gaps, which are noise for a single operator and can prevent A/A calibration from passing.
+# For optimizing this single operator, use benchmark-graph-events.yaml.
 schema_version: 1
 name: layernorm_fwd_1024_graph_v2
 description: FP32 LayerNorm forward, 16384 rows by 1024 columns,

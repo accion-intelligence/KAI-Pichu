@@ -83,6 +83,14 @@ def test_real_subprocess_replay_loop_repairs_optimizes_and_independently_accepts
     assert [row["metrics"]["status"] for row in state["history"]] == ["error", "completed", "completed"]
     assert summary["best_search"]["score"] == pytest.approx(2.0)
     assert len(summary["acceptance_reports"]) == 2
+    # The model sees the scored metric's own measured values, not only a ratio.
+    objective = state["history"][-1]["metrics"]["objective"]
+    assert objective["metric"] == "synthetic_cost" and objective["unit"] == "test_units"
+    assert objective["per_case"]["one"]["baseline"]["mean"] == pytest.approx(10.0)
+    assert objective["per_case"]["one"]["candidate"]["mean"] == pytest.approx(5.0)
+    assert objective["unscored_recorded_metrics"] == ["latency_ms"]
+    assert all("objective" in report for report in summary["acceptance_reports"])
+    assert "objective" not in state["history"][0]["metrics"]  # build/format errors have no measurement
     assert "COST = 5" in (output / "accepted/solution.py").read_text()
     assert "--- a/solution.py" in (output / "best_search.patch").read_text()
     assert (manifest.parent / "solution.py").read_text() == original
@@ -717,3 +725,27 @@ def test_judge_strategy_keys_are_ascii_identifiers():
     assert all(key.isidentifier() and key.isascii() for key in value)
     with pytest.raises(ValueError):
         strategy({"bottleneck": "b", "optimisation method": "m", "modification plan": "p"}, repair=False)
+
+
+def test_feedback_reports_adapter_objective_metric_per_case_and_arm():
+    from kai_light.evaluator import feedback
+    # A graph-internal operator time is the objective; the SDK's outer latency is recorded but not scored.
+    report = {"status": "completed",
+              "spec": {"objective": {"metric": "operator_latency_ms", "unit": "ms", "direction": "minimize", "scope": "kernel"},
+                       "measurement": {"boundary": "two in-graph CUDA events around one operator"}},
+              "records": [
+                  {"block": 0, "case_id": "c", "arm": "a", "samples": [{"operator_latency_ms": 0.110, "latency_ms": 0.140},
+                                                                        {"operator_latency_ms": 0.112, "latency_ms": 0.150}]},
+                  {"block": 0, "case_id": "c", "arm": "b", "samples": [{"operator_latency_ms": 0.098, "latency_ms": 0.130}]},
+              ],
+              "comparison": {"overall": {"speedup": 1.13, "interval": [1.12, 1.14], "block_speedups": [1.13]}}}
+    result = feedback(report)
+    objective = result["objective"]
+    assert objective["metric"] == "operator_latency_ms" and objective["scope"] == "kernel"
+    assert objective["boundary"] == "two in-graph CUDA events around one operator"
+    assert objective["per_case"]["c"]["baseline"] == {"mean": pytest.approx(0.111), "median": pytest.approx(0.111),
+                                                       "min": 0.110, "max": 0.112, "samples": 2}
+    assert objective["per_case"]["c"]["candidate"]["mean"] == pytest.approx(0.098)
+    assert objective["unscored_recorded_metrics"] == ["latency_ms"]
+    assert result["comparison"]["overall"] == {"speedup": 1.13, "interval": [1.12, 1.14]}
+    assert "objective" not in feedback({"status": "error", "message": "build failed"})
