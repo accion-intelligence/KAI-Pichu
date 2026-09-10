@@ -1,2 +1,2 @@
-"""KAI-light single-operator optimization loop."""
+"""KAI Core single-operator optimization loop."""
 from __future__ import annotations

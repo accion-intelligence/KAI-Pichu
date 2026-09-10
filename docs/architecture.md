@@ -1,6 +1,6 @@
 # Architecture
 
-KAI-light separates operator semantics, measured evidence and optimization policy.
+KAI Core separates operator semantics, measured evidence and optimization policy.
 Only the benchmark owns the workload, oracle, tolerances, metric and acceptance.
 Only the optimization loop chooses what implementation to propose next.
 
@@ -33,11 +33,11 @@ evaluation. Profiling results never determine the speedup score.
 Captures retain both NCU reports and base-unit CSV. The optional NCU report adapter
 provides description search, rule findings and source/instruction queries;
 CSV supports a limited structured fallback. Report hashes bind cached queries
-to their original evidence. See the [AI profiling protocol](../src/kai_light/PROFILE_GUIDE.md).
+to their original evidence. See the [AI profiling protocol](../src/kai_core/PROFILE_GUIDE.md).
 
 ## Optimization loop
 
-`kai_light.optimizer` manages candidate generation, correctness repair, performance
+`kai_core.optimizer` manages candidate generation, correctness repair, performance
 diagnosis and selection. It consumes frozen benchmark contracts and structured SDK
 reports, and keeps candidate state separate from measurement and model transport.
 

@@ -26,9 +26,9 @@ Do not upload credentials, proprietary source, customer inputs, or unsanitized m
 3. For task changes, validate the contract before spending model calls:
 
    ```bash
-   python -m kai_light benchmark validate /absolute/path/to/your-task/benchmark.yaml \
+   python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml \
      --checks-only --output task-checks.json
-   python -m kai_light benchmark validate /absolute/path/to/your-task/benchmark.yaml \
+   python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml \
      --split search --output task-preflight.json
    ```
 

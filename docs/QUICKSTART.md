@@ -2,7 +2,7 @@
 
 [← README](../README.md)
 
-This guide matches source commit `f7047172a5078ef43de6d915185d86ed21707fb5`. The product is KAI Core Agent; the current Python module remains `kai_light`. Run commands from a source checkout. This document set does not contain the executable source.
+This guide matches source commit `f7047172a5078ef43de6d915185d86ed21707fb5`. The product is KAI Core Agent; the current Python module remains `kai_core`. Run commands from a source checkout. This document set does not contain the executable source.
 
 ## 1. Prepare the environment
 
@@ -14,7 +14,7 @@ In an activated Python environment, from the repository root:
 
 ```bash
 python -m pip install -e .
-python -m kai_light --help
+python -m kai_core --help
 ```
 
 Core runtime dependencies are Pydantic 2 and PyYAML. Installation, exported guides, schema, and dry-run do not require model calls. GPU workload checks do require the corresponding GPU environment.
@@ -26,8 +26,8 @@ A task consists of a **manifest** (semantics, objective, files, measurement sett
 Export the machine-readable schema and authoring instructions:
 
 ```bash
-python -m kai_light benchmark guide --output task-authoring.md
-python -m kai_light benchmark schema --output task-schema.json
+python -m kai_core benchmark guide --output task-authoring.md
+python -m kai_core benchmark schema --output task-schema.json
 ```
 
 Use these with your coding agent and your operator description. You decide the input domain, output semantics, baseline, tolerances, timed boundary, and editable files. Review the generated contract before optimization.
@@ -35,7 +35,7 @@ Use these with your coding agent and your operator description. You decide the i
 To scaffold the adapter yourself, choose a suitable template and a new directory:
 
 ```bash
-python -m kai_light benchmark init /absolute/path/to/your-task --template stateless
+python -m kai_core benchmark init /absolute/path/to/your-task --template stateless
 ```
 
 Available templates: `stateless`, `stateful`, and `command` (external-command workloads, including native implementations). Replace the template workload and validator with your task. A template is a starting structure, not a validator for an arbitrary new operator.
@@ -51,19 +51,19 @@ Important API contracts:
 - `invalid_observations(case, fixture, valid)` supplies invalid observations the validator must reject.
 - `reset(...)` and `synchronize(...)` define repeatable execution and completion where required.
 
-Use the generated guide and [actual API](https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/benchmark/api.py) for full signatures. Measurement fields live under `measurement`; the SDK timer options are `wall` and `cuda_event`. Example-specific metric implementations are not additional SDK timer options.
+Use the generated guide and [actual API](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/api.py) for full signatures. Measurement fields live under `measurement`; the SDK timer options are `wall` and `cuda_event`. Example-specific metric implementations are not additional SDK timer options.
 
 Check conformance before making model calls:
 
 ```bash
-python -m kai_light benchmark validate /absolute/path/to/your-task/benchmark.yaml \
+python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml \
   --checks-only --output task-checks.json
 ```
 
 This executes the task’s checks, which may require a GPU. It does not run A/A calibration. For a complete baseline preflight on the search cases:
 
 ```bash
-python -m kai_light benchmark validate /absolute/path/to/your-task/benchmark.yaml \
+python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml \
   --split search --output task-preflight.json
 ```
 
@@ -72,7 +72,7 @@ The optimizer also runs a preflight before its first generation call. Use new re
 ## 3. Choose the models and budget
 
 ```bash
-python -m kai_light config --output optimizer.yaml
+python -m kai_core config --output optimizer.yaml
 ```
 
 Edit the exported file:
@@ -86,7 +86,7 @@ Edit the exported file:
 | `budget` | Rounds, model calls, total time, per-evaluation timeout, acceptance repeats |
 | `profile.enabled` | Set `true` to collect NCU evidence when your environment supports it |
 
-The exported default key-variable name is `KAI_LIGHT_API_KEY`. Set it securely in your environment, or change `api_key_env` to an existing key-variable name. For a local endpoint that needs no authentication, set `api_key_env: ""`. Do not place secrets in the task or commit them to source control.
+The exported default key-variable name is `KAI_CORE_API_KEY`. Set it securely in your environment, or change `api_key_env` to an existing key-variable name. For a local endpoint that needs no authentication, set `api_key_env: ""`. Do not place secrets in the task or commit them to source control.
 
 Alternatively, from the source checkout, use the bundled launcher to load the key from a dotenv file and select a physical GPU by UUID. With your configured `optimizer.yaml` and a new output directory:
 
@@ -105,7 +105,7 @@ The tool uses your compute and model account. Round/call/time limits bound the w
 Optional dry-run, using a new output directory:
 
 ```bash
-python -m kai_light optimize /absolute/path/to/your-task/benchmark.yaml \
+python -m kai_core optimize /absolute/path/to/your-task/benchmark.yaml \
   --config optimizer.yaml --output runs/my-operator --dry-run
 ```
 
@@ -114,7 +114,7 @@ Inspect `plan.json` and the frozen task bundle. Dry-run makes no model calls and
 To execute that planned run, use the same configuration and directory:
 
 ```bash
-python -m kai_light optimize /absolute/path/to/your-task/benchmark.yaml \
+python -m kai_core optimize /absolute/path/to/your-task/benchmark.yaml \
   --config optimizer.yaml --output runs/my-operator --resume
 ```
 
@@ -141,9 +141,9 @@ An interrupted run can resume with the original configuration. Reserved calls an
 ## Optional: inspect NCU evidence directly
 
 ```bash
-python -m kai_light profile --guide
-python -m kai_light profile --dependencies
-python -m kai_light profile --schema
+python -m kai_core profile --guide
+python -m kai_core profile --dependencies
+python -m kai_core profile --schema
 ```
 
 NCU capture and the optional report-reader integration are distinct. Structured CSV evidence remains available without the reader; richer rules and source-level queries depend on installed capabilities. Querying a saved report cannot recover counters that were not captured.

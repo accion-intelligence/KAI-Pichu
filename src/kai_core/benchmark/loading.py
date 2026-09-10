@@ -38,7 +38,7 @@ def load_adapter(path: Path, spec: BenchmarkSpec) -> Benchmark:
         raise ValueError("adapter resolves outside benchmark directory")
     cls = getattr(load_python_file(source), class_name)
     if not isinstance(cls, type) or not issubclass(cls, Benchmark):
-        raise TypeError("adapter class must extend kai_light.benchmark.Benchmark")
+        raise TypeError("adapter class must extend kai_core.benchmark.Benchmark")
     return cls(spec)
 
 

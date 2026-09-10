@@ -1,5 +1,5 @@
 [project]
-name = "kai-light"
+name = "kai-core"
 version = "0.1.0"
 description = "Single-operator GPU optimization with calibrated benchmarks and an agent optimization loop."
 readme = "README.md"
@@ -12,7 +12,7 @@ dependencies = ["pydantic>=2,<3", "PyYAML>=6"]
 dev = ["pytest>=7"]
 
 [project.scripts]
-kai-light = "kai_light.cli:main"
+kai-core = "kai_core.cli:main"
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -22,8 +22,8 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"kai_light" = ["*.md"]
-"kai_light.benchmark" = ["*.md", "templates/**/*"]
+"kai_core" = ["*.md"]
+"kai_core.benchmark" = ["*.md", "templates/**/*"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["**/__pycache__/*", "**/*.pyc"]

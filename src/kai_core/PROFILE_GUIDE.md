@@ -1,6 +1,6 @@
 # NCU evidence for one operator
 
-KAI-light profiles the selected search case with the same candidate shown to
+KAI Core profiles the selected search case with the same candidate shown to
 the optimization judge. Compilation, input setup, reset, warmup and validation
 remain outside the profiler range. One operator can launch several kernels:
 retain the launch row ID when interpreting every metric. Profiling never supplies
@@ -19,7 +19,7 @@ Each capture saves `capture.ncu-rep`, `metrics.csv`, `workload.json`, the proces
 log and `profile.json`. CSV values use NCU base units. An optional NCU report
 reader supplies structured report data; `profile.report_reader` can select its
 executable. See [dependency setup](PROFILE_DEPENDENCIES.md), also available with
-`kai-light profile --dependencies`. The
+`kai-core profile --dependencies`. The
 parent KAI source tree is not a runtime dependency.
 
 The report reader supplies report metric descriptions/units and NVIDIA rule findings, with
@@ -116,7 +116,7 @@ loop does not manufacture a diagnosis or exceed the call budget.
 
 ```python
 from pathlib import Path
-from kai_light.profiling import ProfileReport
+from kai_core.profiling import ProfileReport
 
 report = ProfileReport(Path("capture.ncu-rep"), csv_path=Path("metrics.csv"))
 catalog = report.query({"operation": "catalog", "query": "register"})
@@ -129,11 +129,11 @@ if catalog["status"] == "available" and catalog["data"]["next_query"]:
 ```
 
 ```bash
-kai-light profile --guide
-kai-light profile --schema
-kai-light profile capture.ncu-rep
-kai-light profile capture.ncu-rep --request '{"operation":"catalog","query":"stall"}'
-kai-light profile capture.ncu-rep --request '{"operation":"rules","row_id":"launch:0"}'
+kai-core profile --guide
+kai-core profile --schema
+kai-core profile capture.ncu-rep
+kai-core profile capture.ncu-rep --request '{"operation":"catalog","query":"stall"}'
+kai-core profile capture.ncu-rep --request '{"operation":"rules","row_id":"launch:0"}'
 ```
 
 These commands read existing captures. Options include `--csv`, `--report-reader`,

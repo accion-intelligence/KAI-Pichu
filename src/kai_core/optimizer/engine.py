@@ -232,7 +232,7 @@ class OptimizationLoop:
             if self.state["status"] == "accepted":
                 accepted = root / "accepted"
                 shutil.copytree(source, accepted)
-        summary = {"project": "KAI-light", "backend": "kai_light.optimizer",
+        summary = {"project": "KAI Core", "backend": "kai_core.optimizer",
                    "status": self.state["status"], "message": self.state.get("message", ""),
                    "final_accepted": self.state["status"] == "accepted", "best_search": best,
                    "acceptance_reports": self.state.get("acceptance_reports", []),
@@ -268,7 +268,7 @@ class OptimizationLoop:
             try:
                 task_context = self.workspace.context(self.config.max_context_chars)
                 if dry_run:
-                    write_json(root / "plan.json", {"backend": "kai_light.optimizer", "context": task_context,
+                    write_json(root / "plan.json", {"backend": "kai_core.optimizer", "context": task_context,
                                                    "first_request": messages(GENERATOR, task_context)}, replace=resume)
                     self.state["status"] = "planned"
                 else:

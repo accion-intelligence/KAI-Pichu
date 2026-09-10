@@ -3,7 +3,7 @@ generator:
   provider: chat_completions
   base_url: http://localhost:8000/v1
   model: YOUR_MODEL_NAME
-  api_key_env: KAI_LIGHT_API_KEY  # Must be set before a live run; use "" for a keyless local endpoint.
+  api_key_env: KAI_CORE_API_KEY  # Must be set before a live run; use "" for a keyless local endpoint.
   max_tokens: 8192
   temperature: 0.2
   timeout_seconds: 120
@@ -11,7 +11,7 @@ generator:
 #   provider: chat_completions
 #   base_url: http://localhost:8000/v1
 #   model: YOUR_JUDGE_MODEL
-#   api_key_env: KAI_LIGHT_API_KEY
+#   api_key_env: KAI_CORE_API_KEY
 budget:
   rounds: 10
   llm_calls: 30

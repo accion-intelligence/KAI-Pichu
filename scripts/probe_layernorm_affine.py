@@ -6,8 +6,8 @@ from contextlib import ExitStack
 import json
 from pathlib import Path
 
-from kai_light.benchmark.loading import load_adapter
-from kai_light.benchmark.models import load_spec
+from kai_core.benchmark.loading import load_adapter
+from kai_core.benchmark.models import load_spec
 
 
 def probe(manifest: Path, candidate: Path, *, capture_before_update: bool = False) -> dict:

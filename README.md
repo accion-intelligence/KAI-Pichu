@@ -30,22 +30,20 @@ The agent is an **engineering tool**, not a fixed benchmark or a kernel library.
 
 Use a Linux GPU environment with Python 3.10+, a CUDA toolchain, and the dependencies required by your operator. Bring your own model endpoint and GPU; NCU profiling is optional.
 
-*Compatibility note: the current source checkout uses the Python module `kai_light`. These commands match that checkout; the product name is KAI Core Agent.*
-
 **1. Install from a source checkout**
 
 From the repository root, in your Python environment:
 
 ```bash
 python -m pip install -e .
-python -m kai_light --help
+python -m kai_core --help
 ```
 
 <details>
 <summary>Optional: check your GPU environment with the packaged LayerNorm task</summary>
 
 ```bash
-python -m kai_light benchmark validate examples/layernorm/benchmark-graph-events.yaml \
+python -m kai_core benchmark validate examples/layernorm/benchmark-graph-events.yaml \
   --split search --output layernorm-preflight.json
 ```
 
@@ -60,9 +58,9 @@ Use the graph-events manifest above. The example ships a second manifest at a wi
 Start with your own specification or existing implementation. A runnable task is a **manifest + adapter**: the contract for your operator and the code that prepares inputs, loads implementations, and checks results. Export the authoring guide and schema, then scaffold a task:
 
 ```bash
-python -m kai_light benchmark guide --output task-authoring.md
-python -m kai_light benchmark schema --output task-schema.json
-python -m kai_light benchmark init /absolute/path/to/your-task --template stateless
+python -m kai_core benchmark guide --output task-authoring.md
+python -m kai_core benchmark schema --output task-schema.json
+python -m kai_core benchmark init /absolute/path/to/your-task --template stateless
 ```
 
 Adapt the template yourself, or give your coding agent the exported files and this instruction:
@@ -76,9 +74,9 @@ Adapt the template yourself, or give your coding agent the exported files and th
 Export the model configuration, set your endpoint and budget, then start the agent against your reviewed task. The optimizer checks the baseline before making its first generation call.
 
 ```bash
-python -m kai_light config --output optimizer.yaml
+python -m kai_core config --output optimizer.yaml
 # Edit optimizer.yaml: model, endpoint, key variable, budget; enable NCU if available.
-python -m kai_light optimize /absolute/path/to/your-task/benchmark.yaml \
+python -m kai_core optimize /absolute/path/to/your-task/benchmark.yaml \
   --config optimizer.yaml --output runs/my-operator
 ```
 

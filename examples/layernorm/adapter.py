@@ -1,4 +1,4 @@
-"""Adapt the LayerNorm task using public KAI-light SDK hooks."""
+"""Adapt the LayerNorm task using public KAI Core SDK hooks."""
 from __future__ import annotations
 
 import ctypes
@@ -11,7 +11,7 @@ from typing import Any, Iterable
 import torch
 from torch.utils.cpp_extension import include_paths, library_paths
 
-from kai_light.benchmark import (
+from kai_core.benchmark import (
     Benchmark, Case, Observation, Validation, fixture_fingerprint, load_python_file,
 )
 

@@ -21,8 +21,8 @@ def install_alias(executable: str, output: Path, *, python_dir_env: str | None =
         raise ValueError("reader environment variable must be a valid identifier")
     lines = ["#!/bin/sh"]
     if python_dir_env:
-        lines.extend(['if [ "${KAI_LIGHT_REPORT_READER_DIR+x}" = x ]; then',
-                      f'    export {python_dir_env}="$KAI_LIGHT_REPORT_READER_DIR"', "fi"])
+        lines.extend(['if [ "${KAI_CORE_REPORT_READER_DIR+x}" = x ]; then',
+                      f'    export {python_dir_env}="$KAI_CORE_REPORT_READER_DIR"', "fi"])
     lines.append(f'exec {shlex.quote(str(target))} "$@"')
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("x") as handle:

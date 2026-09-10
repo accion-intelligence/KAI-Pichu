@@ -17,7 +17,7 @@ class ModelConfig(ConfigModel):
     provider: Literal["chat_completions", "responses", "replay"] = "chat_completions"
     model: str = ""
     base_url: str = ""
-    api_key_env: str = Field(default="KAI_LIGHT_API_KEY",
+    api_key_env: str = Field(default="KAI_CORE_API_KEY",
         description="Environment variable holding the bearer token; empty string means the endpoint needs no key")
     max_tokens: int = Field(default=8192, ge=1)
     temperature: float | None = Field(default=0.2, ge=0)

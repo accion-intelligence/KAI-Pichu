@@ -8,7 +8,7 @@ import random
 import statistics
 from typing import Any
 
-from kai_light import __version__
+from kai_core import __version__
 
 from .api import Benchmark, Observation, Validation, json_fingerprint
 from .loading import file_inventory, load_adapter, provenance

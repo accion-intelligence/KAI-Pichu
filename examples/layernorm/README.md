@@ -34,7 +34,7 @@ architecture. The supplied manifests target SM120; other architectures need a ma
 From the repository root, with no model calls:
 
 ```bash
-python -m kai_light benchmark validate examples/layernorm/benchmark-graph-events.yaml \
+python -m kai_core benchmark validate examples/layernorm/benchmark-graph-events.yaml \
   --split search --output layernorm-preflight.json
 ```
 

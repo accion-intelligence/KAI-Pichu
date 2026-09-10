@@ -11,20 +11,20 @@ from threading import Thread
 import pytest
 import yaml
 
-from kai_light.benchmark.api import json_fingerprint
-from kai_light.cli import main
-from kai_light.config import ModelConfig, OptimizeConfig, Resources
-from kai_light.optimizer.engine import OptimizationLoop
-from kai_light.io import parse_object
-from kai_light.models import ModelClient
-from kai_light.process import GpuGuard, run_process
-from kai_light.workspace import Workspace
+from kai_core.benchmark.api import json_fingerprint
+from kai_core.cli import main
+from kai_core.config import ModelConfig, OptimizeConfig, Resources
+from kai_core.optimizer.engine import OptimizationLoop
+from kai_core.io import parse_object
+from kai_core.models import ModelClient
+from kai_core.process import GpuGuard, run_process
+from kai_core.workspace import Workspace
 
 
 # Synthetic cost is ONLY a deterministic control-flow test metric, not a
 # performance benchmark. Correctness still executes the actual candidate source.
 ADAPTER = '''
-from kai_light.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
+from kai_core.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
 class Task(Benchmark):
     def cases(self, split):
         return [Case(id="one", params={"x": 3 if split != "acceptance" else 17})]
@@ -101,7 +101,7 @@ def test_real_subprocess_replay_loop_repairs_optimizes_and_independently_accepts
 
 def test_dry_run_has_no_evaluation_or_model_calls_and_can_resume(task, monkeypatch):
     manifest, config, output = task
-    from kai_light.evaluator import Evaluator
+    from kai_core.evaluator import Evaluator
     with monkeypatch.context() as patch:
         patch.setattr(Evaluator, "evaluate", lambda *a, **k: pytest.fail("dry run evaluated"))
         patch.setattr(ModelClient, "complete", lambda *a, **k: pytest.fail("dry run called model"))
@@ -272,7 +272,7 @@ def test_process_timeout_is_bounded(tmp_path):
 @pytest.mark.parametrize("status", ["completed", "incomplete", "failed"])
 def test_responses_transport_preserves_budget_and_rejects_partial_output(monkeypatch, status):
     from io import BytesIO
-    from kai_light import models
+    from kai_core import models
     requests = []
 
     def respond(request, timeout):
@@ -302,7 +302,7 @@ def test_responses_transport_preserves_budget_and_rejects_partial_output(monkeyp
 
 
 def test_gpu_guard_maps_visible_devices_and_rejects_foreign_processes(monkeypatch):
-    from kai_light import process
+    from kai_core import process
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,0")
     monkeypatch.setattr(process, "_query", lambda fields, apps=False: [["GPU-two", "999"]] if apps else [["0", "GPU-zero"], ["2", "GPU-two"]])
     monkeypatch.setattr(os, "getpgid", lambda pid: 999)
@@ -318,7 +318,7 @@ def test_gpu_guard_maps_visible_devices_and_rejects_foreign_processes(monkeypatc
 ])
 def test_responses_uses_final_answer_without_concatenating_commentary(monkeypatch, commentary):
     from io import BytesIO
-    from kai_light import models
+    from kai_core import models
     final = '{"action":"query_profile","queries":[{"operation":"metrics","counter":"dram__bytes.sum"}]}'
     output = [
         {"type": "message", "role": "assistant", "phase": "commentary",
@@ -340,7 +340,7 @@ def test_responses_uses_final_answer_without_concatenating_commentary(monkeypatc
 @pytest.mark.parametrize("phases", [["commentary"], [None, None], ["final_answer", "final_answer"]])
 def test_responses_rejects_missing_or_ambiguous_final_answer(monkeypatch, phases):
     from io import BytesIO
-    from kai_light import models
+    from kai_core import models
     output = [{"type": "message", "role": "assistant", "phase": phase,
                "content": [{"type": "output_text", "text": reply(5 + i)}]} for i, phase in enumerate(phases)]
     value = {"status": "completed", "output": output}
@@ -353,7 +353,7 @@ def test_responses_rejects_missing_or_ambiguous_final_answer(monkeypatch, phases
 @pytest.mark.parametrize("phase", ["final_answer", None])
 def test_responses_collapses_identical_messages_without_duplicate_tool_execution(monkeypatch, phase):
     from io import BytesIO
-    from kai_light import models
+    from kai_core import models
     query = '{"action":"query_profile","queries":[{"operation":"catalog","query":"memory"}]}'
     output = [{"id": f"msg-{i}", "type": "message", "role": "assistant", "phase": phase,
                "content": [{"type": "output_text", "text": query}]} for i in range(2)]
@@ -367,7 +367,7 @@ def test_responses_collapses_identical_messages_without_duplicate_tool_execution
 
 
 def test_resource_conflict_during_process_invalidates_even_an_existing_report(tmp_path, monkeypatch):
-    from kai_light import process
+    from kai_core import process
     calls = 0
 
     class Guard:
@@ -387,7 +387,7 @@ def test_resource_conflict_during_process_invalidates_even_an_existing_report(tm
 
 
 def test_cli_help_does_not_import_torch_or_original_kai():
-    code = "import sys; from kai_light.cli import main\ntry: main(['--help'])\nexcept SystemExit: pass\nassert 'torch' not in sys.modules\nassert 'kai' not in sys.modules"
+    code = "import sys; from kai_core.cli import main\ntry: main(['--help'])\nexcept SystemExit: pass\nassert 'torch' not in sys.modules\nassert 'kai' not in sys.modules"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
@@ -438,7 +438,7 @@ def test_profiler_and_judge_use_the_same_best_candidate_after_regression(task, m
 
 
 def test_resource_monitor_overrides_child_accepted_report(task, monkeypatch):
-    from kai_light import evaluator
+    from kai_core import evaluator
     manifest, config_path, output = task
     workspace = Workspace.create(manifest, output)
     config = OptimizeConfig.model_validate(yaml.safe_load(config_path.read_text()))
@@ -457,8 +457,8 @@ def test_resource_monitor_overrides_child_accepted_report(task, monkeypatch):
 
 @pytest.mark.parametrize("metrics", [[], ["gpu__time_duration.sum"]])
 def test_ncu_command_uses_adapter_worker_and_binds_candidate_fingerprint(task, monkeypatch, metrics):
-    from kai_light import evaluator
-    from kai_light.benchmark.loading import file_inventory
+    from kai_core import evaluator
+    from kai_core.benchmark.loading import file_inventory
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
     values["profile"] = {"enabled": True, "case_id": "one", "metrics": metrics}
@@ -478,7 +478,7 @@ def test_ncu_command_uses_adapter_worker_and_binds_candidate_fingerprint(task, m
     assert result["status"] == "profiled"
     assert result["implementation_fingerprint"] == json_fingerprint(file_inventory(workspace.baseline, workspace.spec.implementation.files))
     command = commands[0]
-    assert "kai_light.profile_worker" in command
+    assert "kai_core.profile_worker" in command
     assert "--profile-from-start=off" in command
     assert any(arg.startswith("--export=") for arg in command)
     assert "--print-units=base" in command
@@ -495,7 +495,7 @@ def test_ncu_command_uses_adapter_worker_and_binds_candidate_fingerprint(task, m
 
 
 def test_judge_discovers_metrics_then_queries_before_generating(task, monkeypatch):
-    from kai_light.profiling import ProfileReport
+    from kai_core.profiling import ProfileReport
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
     values["budget"]["llm_calls"] = 7
@@ -569,7 +569,7 @@ def test_invalid_evidence_question_returns_feedback_without_executing_queries(ta
 
 
 def test_on_demand_evidence_can_take_four_steps_and_reserves_future_iterations(task, monkeypatch):
-    from kai_light.profiling import ProfileReport
+    from kai_core.profiling import ProfileReport
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
     final = values["judge"]["responses"][-1]
@@ -675,7 +675,7 @@ def test_live_provider_requires_api_key_before_creating_run_directory(task, monk
 
 
 def test_api_key_check_skips_replay_and_keyless_endpoints(monkeypatch):
-    from kai_light.config import missing_api_keys
+    from kai_core.config import missing_api_keys
     monkeypatch.delenv("KAI_TEST_MISSING_KEY", raising=False)
     live = ModelConfig(model="m", base_url="http://127.0.0.1:9/v1", api_key_env="KAI_TEST_MISSING_KEY")
     assert missing_api_keys(OptimizeConfig(generator=live)) == ["KAI_TEST_MISSING_KEY"]
@@ -698,7 +698,7 @@ def test_api_key_check_skips_replay_and_keyless_endpoints(monkeypatch):
     ("cpu", 0, 3, 3),
 ])
 def test_evaluator_guards_the_same_gpu_the_workload_uses(task, option_device, measurement_device, gpu_device, expected):
-    from kai_light.evaluator import Evaluator
+    from kai_core.evaluator import Evaluator
     manifest, config_path, output = task
     spec = yaml.safe_load(manifest.read_text())
     spec["options"] = {"device": option_device}
@@ -716,7 +716,7 @@ def test_evaluator_guards_the_same_gpu_the_workload_uses(task, option_device, me
 
 
 def test_judge_strategy_keys_are_ascii_identifiers():
-    from kai_light.optimizer.prompts import OPTIMIZATION_JUDGE, REPAIR_JUDGE, strategy
+    from kai_core.optimizer.prompts import OPTIMIZATION_JUDGE, REPAIR_JUDGE, strategy
     for text in (OPTIMIZATION_JUDGE, REPAIR_JUDGE):
         for key in ("optimisation method", "modification plan"):
             assert key not in text
@@ -728,7 +728,7 @@ def test_judge_strategy_keys_are_ascii_identifiers():
 
 
 def test_feedback_reports_adapter_objective_metric_per_case_and_arm():
-    from kai_light.evaluator import feedback
+    from kai_core.evaluator import feedback
     # A graph-internal operator time is the objective; the SDK's outer latency is recorded but not scored.
     report = {"status": "completed",
               "spec": {"objective": {"metric": "operator_latency_ms", "unit": "ms", "direction": "minimize", "scope": "kernel"},

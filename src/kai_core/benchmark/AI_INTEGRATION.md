@@ -1,7 +1,7 @@
-# Instructions for a coding agent: integrate a project with KAI-light Benchmark SDK v1
+# Instructions for a coding agent: integrate a project with KAI Core Benchmark SDK v1
 
 Your task is to construct a trustworthy, reproducible benchmark for the user's
-existing GPU program. Use the installed `kai_light.benchmark` SDK. This guide is
+existing GPU program. Use the installed `kai_core.benchmark` SDK. This guide is
 tool-agnostic: it does not require a particular coding agent or LLM provider.
 
 ## 1. Establish the task before writing the adapter
@@ -28,15 +28,15 @@ speedup just to finish integration.
 ## 2. Inspect the installed protocol and scaffold
 
 ```bash
-python -m kai_light benchmark --help
-python -m kai_light benchmark schema --output /tmp/task-schema.json
-python -m kai_light benchmark init /path/to/new-task --template stateful
+python -m kai_core benchmark --help
+python -m kai_core benchmark schema --output /tmp/task-schema.json
+python -m kai_core benchmark init /path/to/new-task --template stateful
 ```
 
 Choose `stateless` for a PyTorch operator, `stateful` for a resettable sequence,
 or `command` for an external C++/CUDA program. The supplied CPU examples teach
 the protocol; replace their workload with the user's real one. Read the template
-README and the public `Benchmark` abstract methods. Do not add task-specific behavior to KAI-light core code to
+README and the public `Benchmark` abstract methods. Do not add task-specific behavior to KAI Core core code to
 make an application-specific task work.
 
 ## 3. Define the bundle
@@ -76,7 +76,7 @@ required by the real task; don't infer coverage from an arbitrary count of cases
 
 ## 4. Implement the adapter
 
-Subclass `kai_light.benchmark.Benchmark` and implement:
+Subclass `kai_core.benchmark.Benchmark` and implement:
 
 | Method | Contract |
 | --- | --- |
@@ -153,9 +153,9 @@ recording external data, dependency, driver, clock and server configuration.
 ## 6. Run the integration checks and calibration
 
 ```bash
-python -m kai_light benchmark validate /path/to/task/benchmark.yaml \
+python -m kai_core benchmark validate /path/to/task/benchmark.yaml \
   --checks-only --output /tmp/task-checks.json
-python -m kai_light benchmark validate /path/to/task/benchmark.yaml \
+python -m kai_core benchmark validate /path/to/task/benchmark.yaml \
   --split search --output /tmp/task-calibration.json
 ```
 
@@ -187,14 +187,14 @@ version and requires a new baseline/calibration.
 To compare an implementation:
 
 ```bash
-python -m kai_light benchmark run /path/to/task/benchmark.yaml \
+python -m kai_core benchmark run /path/to/task/benchmark.yaml \
   --candidate /path/to/candidate --split search --output /tmp/task-comparison.json
 ```
 
 Exit code 0 means the comparison completed; inspect `acceptance.accepted` for
 the scoped result. Freeze the chosen candidate and independently repeat on the
 acceptance workloads before integration. A missed target is a valid experimental
-outcome, not permission to weaken the benchmark. Use `kai-light optimize benchmark.yaml --config optimizer.yaml --output /path/to/new-run`
-to connect this manifest to KAI-light's optimization loop. It freezes the
+outcome, not permission to weaken the benchmark. Use `kai-core optimize benchmark.yaml --config optimizer.yaml --output /path/to/new-run`
+to connect this manifest to KAI Core's optimization loop. It freezes the
 benchmark, evaluates candidates with this SDK and independently checks the selected
 candidate on the acceptance split.

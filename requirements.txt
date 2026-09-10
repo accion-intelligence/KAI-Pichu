@@ -1,7 +1,7 @@
 # Runtime and development dependencies for a source checkout.
 # Install with:  python -m pip install -r requirements.txt
-# The last line installs kai_light itself in editable mode. This is required:
-# evaluations, tests and NCU workers run in separate `python -m kai_light`
+# The last line installs kai_core itself in editable mode. This is required:
+# evaluations, tests and NCU workers run in separate `python -m kai_core`
 # processes, which must be able to import the package.
 pydantic>=2,<3
 PyYAML>=6

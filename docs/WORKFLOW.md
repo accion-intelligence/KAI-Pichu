@@ -50,8 +50,8 @@ The diagram groups behavior for readability; it is not a deployment diagram or a
 
 | Diagram / behavior | Source at the reviewed commit |
 | --- | --- |
-| Generation, branching, best candidate, budgets, resume, acceptance | [OptimizationLoop](https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/optimizer/engine.py) |
-| Repair diagnosis, performance strategy, on-demand profile questions | [Prompts and strategy contract](https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/optimizer/prompts.py) |
-| Evaluation processes, feedback, capture and report queries | [Evaluator](https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/evaluator.py) |
-| Input preparation, validation, paired measurement, A/A | [Benchmark runner](https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/benchmark/runner.py) |
-| Model, budget, resource and profiling configuration | [Configuration](https://github.com/accion-intelligence/KAI-Light/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_light/config.py) |
+| Generation, branching, best candidate, budgets, resume, acceptance | [OptimizationLoop](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/optimizer/engine.py) |
+| Repair diagnosis, performance strategy, on-demand profile questions | [Prompts and strategy contract](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/optimizer/prompts.py) |
+| Evaluation processes, feedback, capture and report queries | [Evaluator](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/evaluator.py) |
+| Input preparation, validation, paired measurement, A/A | [Benchmark runner](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/runner.py) |
+| Model, budget, resource and profiling configuration | [Configuration](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/config.py) |

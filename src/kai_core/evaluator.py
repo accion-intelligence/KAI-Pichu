@@ -114,7 +114,7 @@ class Evaluator:
     def evaluate(self, tag: str, *, candidate: Path | None, split: str, timeout: float) -> dict[str, Any]:
         workspace = self.workspace
         output = workspace.root / "reports" / f"{tag}.json"
-        command = [sys.executable, "-m", "kai_light", "benchmark", "validate" if candidate is None else "run",
+        command = [sys.executable, "-m", "kai_core", "benchmark", "validate" if candidate is None else "run",
                    str(workspace.manifest), "--split", split, "--output", str(output)]
         if candidate is not None:
             command += ["--candidate", str(candidate)]
@@ -157,7 +157,7 @@ class Evaluator:
             command.append("--metrics=" + ",".join(settings.metrics))
         else:
             command.extend("--section=" + section for section in settings.sections)
-        command += [sys.executable, "-m", "kai_light.profile_worker", str(self.workspace.manifest),
+        command += [sys.executable, "-m", "kai_core.profile_worker", str(self.workspace.manifest),
                     "--candidate", str(candidate), "--output", str(metadata)]
         if settings.case_id:
             command += ["--case", settings.case_id]

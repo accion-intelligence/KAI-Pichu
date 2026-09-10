@@ -9,13 +9,13 @@ import time
 
 import pytest
 
-from kai_light.benchmark.loading import load_adapter
-from kai_light.benchmark.models import load_spec
-from kai_light.benchmark.timing import Timer
+from kai_core.benchmark.loading import load_adapter
+from kai_core.benchmark.models import load_spec
+from kai_core.benchmark.timing import Timer
 
 
-@pytest.mark.skipif(os.environ.get("KAI_LIGHT_GPU_TESTS") != "1",
-                    reason="requires explicit KAI_LIGHT_GPU_TESTS=1 and an idle CUDA GPU")
+@pytest.mark.skipif(os.environ.get("KAI_CORE_GPU_TESTS") != "1",
+                    reason="requires explicit KAI_CORE_GPU_TESTS=1 and an idle CUDA GPU")
 def test_graph_event_objective_excludes_host_pause_after_submission():
     import torch
 
