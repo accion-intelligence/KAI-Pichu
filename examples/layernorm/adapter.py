@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
-import hashlib
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
@@ -13,7 +12,7 @@ import torch
 from torch.utils.cpp_extension import include_paths, library_paths
 
 from kai_light.benchmark import (
-    Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file,
+    Benchmark, Case, Observation, Validation, fixture_fingerprint, load_python_file,
 )
 
 
@@ -28,7 +27,8 @@ class LayerNorm(Benchmark):
     def __init__(self, spec: Any):
         super().__init__(spec)
         self.root = Path(__file__).resolve().parent
-        self.definition = load_python_file(self.root / "upstream/def.py")
+        self.definition = load_python_file(self.root / "upstream/def.py")  # oracle only
+        self.inputs = load_python_file(self.root / "inputs.py")
         self.device = torch.device(spec.options["device"])
         if self.device.type != "cuda" or self.device.index != spec.measurement.device:
             raise ValueError("options.device must match measurement.device")
@@ -37,31 +37,28 @@ class LayerNorm(Benchmark):
         self.cache_buffer: torch.Tensor | None = None
 
     def cases(self, split: str) -> Iterable[Case]:
-        seeds = [0] if split in ("smoke", "search") else [1001, 1002]
-        return [Case(id=f"original_seed{seed}", params={"seed_offset": seed,
-                     "rows": self.definition.ROWS, "cols": self.definition.COLS},
-                     work_units=self.definition.ROWS) for seed in seeds]
+        return [Case(id=f"{profile}_seed{seed}",
+                     params={"profile": profile, "seed_offset": seed,
+                             "rows": self.definition.ROWS, "cols": self.definition.COLS},
+                     work_units=self.definition.ROWS)
+                for profile, seed in self.inputs.SPLITS[split]]
 
     def prepare(self, case: Case, seed: int) -> dict[str, Any]:
-        # Use the upstream generator and oracle verbatim, with explicit seeding.
-        with torch.cuda.device(self.device), torch.random.fork_rng(devices=[self.device.index]):
-            torch.manual_seed(seed + case.params["seed_offset"])
-            inputs = self.definition.get_inputs()
-            with torch.no_grad():
-                expected = dict(self.definition.reference_fn(inputs))
-            outputs = dict(self.definition.get_outputs(inputs))
-        return {"inputs": dict(inputs), "outputs": outputs, "expected": expected,
+        params = case.params
+        inputs = self.inputs.generate(params["profile"], params["rows"], params["cols"],
+                                      seed + params["seed_offset"], self.device)
+        # The upstream reference stays the independent oracle; only input generation changed.
+        pairs = [(name, inputs[name]) for name in ("x", "gamma", "beta")]
+        with torch.cuda.device(self.device), torch.no_grad():
+            expected = dict(self.definition.reference_fn(pairs))
+            outputs = dict(self.definition.get_outputs(pairs))
+        return {"inputs": inputs, "outputs": outputs, "expected": expected,
                 "graphs": {}, "events": {}}
 
     def fingerprint(self, fixture: dict[str, Any]) -> str:
-        # Hash actual device contents, not just seeds or a cached initial digest.
-        digests = {}
-        for name, tensor in fixture["inputs"].items():
-            data = tensor.detach().cpu().contiguous().numpy()
-            digests[name] = {"sha256": hashlib.sha256(memoryview(data)).hexdigest(),
-                             "shape": list(tensor.shape), "stride": list(tensor.stride()),
-                             "dtype": str(tensor.dtype)}
-        return json_fingerprint(digests)
+        # The fixture also holds poisoned outputs and captured graphs; only the
+        # inputs define the workload identity.
+        return fixture_fingerprint(fixture["inputs"])
 
     def load_implementation(self, workspace: Path) -> NativeImplementation:
         directory = TemporaryDirectory(prefix="kai-layernorm-")

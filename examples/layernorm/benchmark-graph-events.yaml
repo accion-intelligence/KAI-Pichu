@@ -1,7 +1,9 @@
 schema_version: 1
 name: layernorm_fwd_1024_graph_events_v3
-description: FP32 LayerNorm forward, 16384 rows by 1024 columns,
-  including z, mean and reciprocal standard deviation.
+description: FP32 LayerNorm forward, 16384 rows by 1024 columns, including z,
+  mean and reciprocal standard deviation. Rows differ in offset, scale and outlier
+  content across cases. gamma and beta are arbitrary per-column FP32 affine
+  parameters and are never the identity; the affine step must be computed.
 adapter: adapter.py:LayerNorm
 implementation:
   root: baseline
@@ -9,8 +11,12 @@ implementation:
   - solution.cu
 benchmark_files:
 - bridge.cu
+- inputs.py
 - upstream/*.*
 - upstream/layer_norm/*
+agent_files:
+- bridge.cu
+- upstream/description.txt
 objective:
   metric: operator_latency_ms
   unit: ms
