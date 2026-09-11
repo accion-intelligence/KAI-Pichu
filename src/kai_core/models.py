@@ -8,11 +8,30 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .config import ModelConfig
+
+# A completion is not streamed and not stored, so re-sending one costs tokens
+# and nothing else. Retry only faults that carry no decision from the model.
+RETRY_STATUSES = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+MAX_ATTEMPTS = 3
+BACKOFF_SECONDS = 1.0
+MAX_BACKOFF_SECONDS = 16.0
+
+
+def retry_delay(error: HTTPError | None, attempt: int) -> float:
+    """Honour a delta-seconds Retry-After; otherwise back off exponentially."""
+    header = error.headers.get("Retry-After") if error is not None and error.headers else None
+    if header:
+        try:
+            return max(0.0, min(float(header), MAX_BACKOFF_SECONDS))
+        except ValueError:
+            pass  # The HTTP-date form needs a trusted clock; back off instead.
+    return min(BACKOFF_SECONDS * 2 ** attempt, MAX_BACKOFF_SECONDS)
 
 
 class ModelClient:
@@ -43,14 +62,36 @@ class ModelClient:
             headers["Authorization"] = f"Bearer {key}"
         request = Request(config.base_url.rstrip("/") + endpoint,
                           data=json.dumps(body).encode(), headers=headers, method="POST")
-        try:
-            with urlopen(request, timeout=min(timeout, config.timeout_seconds)) as response:
-                value = json.loads(response.read(8 * 1024 * 1024))
-        except HTTPError as error:
-            detail = error.read(8000).decode("utf-8", errors="replace")
-            if key:
-                detail = detail.replace(key, "[redacted]")
-            raise RuntimeError(f"model HTTP {error.code}: {detail}") from None
+        # The caller's timeout is the remaining wall budget for this call, so
+        # retries share it rather than extending it.
+        deadline = time.monotonic() + timeout
+        attempt = 0
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError(f"model transport deadline exhausted after {attempt} attempt(s)")
+            try:
+                with urlopen(request, timeout=min(remaining, config.timeout_seconds)) as response:
+                    value = json.loads(response.read(8 * 1024 * 1024))
+                break
+            except HTTPError as error:
+                detail = error.read(8000).decode("utf-8", errors="replace")
+                if key:
+                    detail = detail.replace(key, "[redacted]")
+                message = f"model HTTP {error.code}: {detail}"
+                retryable = error.code in RETRY_STATUSES
+                delay = retry_delay(error, attempt)
+            except (URLError, TimeoutError, OSError) as error:
+                # No response reached us, so no model decision was lost.
+                message = f"model transport error: {type(error).__name__}: {error}"
+                retryable = True
+                delay = retry_delay(None, attempt)
+            attempt += 1
+            if not retryable or attempt >= MAX_ATTEMPTS:
+                raise RuntimeError(f"{message} (attempt {attempt}/{MAX_ATTEMPTS})") from None
+            if deadline - time.monotonic() <= delay:
+                raise RuntimeError(f"{message} (attempt {attempt}/{MAX_ATTEMPTS}; no budget to retry)") from None
+            time.sleep(delay)
         if config.provider == "responses":
             if value.get("status") != "completed":
                 raise ValueError(f"model response incomplete: {value.get('status')}; {value.get('incomplete_details')}")
@@ -73,7 +114,7 @@ class ModelClient:
             return {"text": content, "usage": value.get("usage", {}),
                     "provider": config.provider, "model": config.model,
                     "response_id": value.get("id"), "finish_reason": value["status"],
-                    "output_messages": output_messages}
+                    "transport_attempts": attempt + 1, "output_messages": output_messages}
         choice = value["choices"][0]
         if choice.get("finish_reason") in ("length", "content_filter"):
             raise ValueError(f"model response incomplete: {choice['finish_reason']}")
@@ -82,7 +123,7 @@ class ModelClient:
             raise ValueError("model returned no textual candidate/strategy")
         return {"text": content, "usage": value.get("usage", {}),
                 "provider": config.provider, "model": config.model,
-                "finish_reason": choice.get("finish_reason")}
+                "transport_attempts": attempt + 1, "finish_reason": choice.get("finish_reason")}
 
     def _complete_anthropic(self, messages: list[dict[str, str]], *, timeout: float) -> dict[str, Any]:
         """One Messages API call through the official SDK.
