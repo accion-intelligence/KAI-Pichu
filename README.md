@@ -143,6 +143,6 @@ Framework changes use Apache-2.0; third-party components retain their own licens
 
 ---
 
-<sub>**KAI Core** (open · single operator) · **KAI Pipeline** (open · end to end) · **KAI Engine** (managed)</sub>
+<sub>**KAI Core** (open · single operator) · **KAI Standard** (open · end to end) · **KAI Enterprise** (managed)</sub>
 
 <sub>Built by [Accion Intelligence](https://github.com/accion-intelligence).</sub>
