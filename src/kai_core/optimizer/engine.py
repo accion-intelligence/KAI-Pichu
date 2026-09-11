@@ -141,10 +141,10 @@ class OptimizationLoop:
                 best = self.state["best"]
                 if best and best["id"] != anchor["id"]:
                     context["best_candidate"] = self._best_candidate_evidence(best)
-            raw_strategy = (self._model("judge", REPAIR_JUDGE, context) if repair
-                            else self._diagnose(index, context))
-            context["strategy"] = strategy(raw_strategy, repair=repair)
-            anchor, anchor_path = self._starting_point(context, anchor, anchor_path)
+            guidance = self._strategy(index, context, repair=repair)
+            if guidance is not None:
+                context["strategy"] = guidance
+                anchor, anchor_path = self._starting_point(context, anchor, anchor_path)
         context["base_round"] = anchor["id"] + 1 if anchor else None
         try:
             reply = self._model("generator", GENERATOR, context)
@@ -264,6 +264,36 @@ class OptimizationLoop:
                             "diagnosis": row.get("diagnosis"), "base_round": row.get("base_round"),
                             "sources": self.workspace.sources(self._path(row))})
         return results
+    def _strategy(self, index: int, context: dict[str, Any], *, repair: bool) -> dict[str, str] | None:
+        """Judge guidance for this round, with one corrective re-ask.
+
+        A reply that breaks the judge's own output contract is the judge's
+        mistake, not the candidate's, and a run with rounds and budget left must
+        not end on it. The generator already works from feedback alone, so a
+        second unusable reply degrades this round to unguided generation and
+        leaves strategy_error in the recorded context.
+        """
+        system = REPAIR_JUDGE if repair else OPTIMIZATION_JUDGE
+        try:
+            raw = self._model("judge", system, context) if repair else self._diagnose(index, context)
+            return strategy(raw, repair=repair)
+        except (ValueError, json.JSONDecodeError) as error:
+            context["strategy_error"] = {"message": str(error)[:1000], "instruction":
+                "The previous reply broke the required output contract. Return only that JSON object."}
+        if self.config.budget.llm_calls - self.state["llm_calls"] < 2:
+            # _diagnose reserves one decision and one generation call per round.
+            # A re-ask must not consume the generation: an unguided candidate is
+            # worth more than guidance with nothing left to generate it.
+            context["strategy_error"]["final_message"] = "no model-call budget for a re-ask"
+            return None
+        if not repair:
+            # The re-ask decides on the evidence already gathered; no new queries.
+            context["profile_query"] = {"enabled": False, "remaining_rounds": 0}
+        try:
+            return strategy(self._model("judge", system, context), repair=repair)
+        except (ValueError, json.JSONDecodeError) as error:
+            context["strategy_error"]["final_message"] = str(error)[:1000]
+            return None
 
     def _diagnose(self, index: int, context: dict[str, Any]) -> dict[str, Any]:
         settings = self.config.profile
@@ -290,7 +320,8 @@ class OptimizationLoop:
             action = response.get("action")
             if action == "read_candidate":
                 if not evidence_ok:
-                    raise StopRun("model_error", "judge requested candidate sources after the diagnostic budget was exhausted")
+                    # A contract violation, not a run-ending fault: _strategy re-asks once.
+                    raise ValueError("candidate reads are exhausted or unavailable; decide with the evidence already provided")
                 if set(response) - {"action", "rounds"}:
                     results = [{"status": "unavailable", "error": {"message": "read_candidate takes only rounds"}}]
                 else:
@@ -301,7 +332,9 @@ class OptimizationLoop:
             if action != "query_profile":
                 return response
             if not enabled:
-                raise StopRun("model_error", "judge requested profile queries after the diagnostic budget was exhausted")
+                # A contract violation, not a run-ending fault: _strategy re-asks once.
+                raise ValueError("profile queries are exhausted or unavailable; "
+                                 "decide with the evidence already provided")
             requests = response.get("queries")
             question = response.get("question")
             valid_question = ("question" not in response or

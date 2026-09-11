@@ -628,9 +628,11 @@ def test_query_request_cannot_overrun_diagnostic_or_model_budget(task, monkeypat
     monkeypatch.setattr(loop.evaluator, "profile", lambda *a, **k: {"status": "profiled", "query_available": True, "profile_id": "test"})
     monkeypatch.setattr(loop.evaluator, "query_profile", lambda *a, **k: pytest.fail("no query budget remains"))
     summary = loop.run()
-    assert summary["status"] == "model_error"
-    assert summary["llm_calls"] == 4
-    assert not summary["final_accepted"]
+    # No query executes without budget (the monkeypatch above fails the test if
+    # one does). Refusing the request no longer ends the run: the call reserved
+    # for generation still produces a candidate, unguided.
+    assert summary["llm_calls"] == values["budget"]["llm_calls"] == 5
+    assert summary["status"] == "accepted" and summary["final_accepted"]
 
 
 @pytest.mark.parametrize("question", ["", ["why"], "x" + " " * 1000])
@@ -798,6 +800,41 @@ def test_evaluator_guards_the_same_gpu_the_workload_uses(task, option_device, me
             Evaluator(workspace, config)
     else:
         assert Evaluator(workspace, config).gpu_device == expected
+
+
+def _judge_context(output: Path, call: int) -> dict:
+    request = json.loads((output / f"llm/call-{call:04d}.request.json").read_text())
+    return json.loads(request["messages"][1]["content"])
+
+
+def test_malformed_judge_reply_is_re_asked_instead_of_ending_the_run(task):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["budget"]["llm_calls"] = 6
+    values["judge"]["responses"].insert(1, json.dumps({"bottleneck": "missing the other required fields"}))
+    config_path.write_text(yaml.safe_dump(values))
+    assert main(["optimize", str(manifest), "--config", str(config_path), "--output", str(output)]) == 0
+    summary = json.loads((output / "summary.json").read_text())
+    assert summary["final_accepted"] and summary["llm_calls"] == 6
+    reask = _judge_context(output, 4)
+    assert reask["strategy_error"]["message"] and reask["profile_query"] == {"enabled": False, "remaining_rounds": 0}
+    generation = _judge_context(output, 5)
+    assert generation["strategy"]["bottleneck"] == "synthetic test"
+
+
+def test_two_malformed_judge_replies_generate_unguided_without_ending_the_run(task):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["budget"]["llm_calls"] = 6
+    values["judge"]["responses"][1:] = [json.dumps({"bottleneck": "incomplete"}),
+                                        json.dumps({"optimization_method": "still incomplete"})]
+    config_path.write_text(yaml.safe_dump(values))
+    assert main(["optimize", str(manifest), "--config", str(config_path), "--output", str(output)]) == 0
+    summary = json.loads((output / "summary.json").read_text())
+    assert summary["status"] != "model_error" and summary["rounds_completed"] == 3
+    generation = _judge_context(output, 5)
+    assert "strategy" not in generation
+    assert generation["strategy_error"]["message"] and generation["strategy_error"]["final_message"]
 
 
 def test_judge_strategy_keys_are_ascii_identifiers():
