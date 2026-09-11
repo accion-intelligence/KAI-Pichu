@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 from threading import Thread
+import time
 
 import pytest
 import yaml
@@ -250,6 +251,90 @@ def test_chat_transport_sends_explicit_endpoint_model_and_key_without_logging_it
     assert requests[0][2]["model"] == "test-model"
     assert response["usage"]["total_tokens"] == 7
     assert "test-secret" not in json.dumps(response)
+
+
+def _transport_server(handler_body):
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            handler_body(self)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread
+
+
+def _complete(server, timeout=10, **overrides):
+    config = ModelConfig(model="test-model", api_key_env="",
+                         base_url=f"http://127.0.0.1:{server.server_port}/v1", **overrides)
+    return ModelClient(config).complete([{"role": "user", "content": "test"}], index=0, timeout=timeout)
+
+
+def test_transient_transport_faults_are_retried_within_the_wall_budget():
+    seen = []
+
+    def handler(request):
+        seen.append(request.path)
+        if len(seen) < 3:
+            request.send_response(503)
+            request.send_header("Retry-After", "0")
+            request.end_headers()
+            request.wfile.write(b'{"error": "overloaded"}')
+            return
+        request.send_response(200)
+        request.end_headers()
+        request.wfile.write(json.dumps(
+            {"choices": [{"message": {"content": reply(5)}, "finish_reason": "stop"}]}).encode())
+
+    server, thread = _transport_server(handler)
+    try:
+        response = _complete(server)
+    finally:
+        server.shutdown(); server.server_close(); thread.join()
+    assert len(seen) == 3 and response["transport_attempts"] == 3
+    assert parse_object(response["text"])["files"]
+
+
+def test_a_rejected_request_is_not_retried():
+    seen = []
+
+    def handler(request):
+        seen.append(request.path)
+        request.send_response(400)
+        request.end_headers()
+        request.wfile.write(b'{"error": "context length exceeded"}')
+
+    server, thread = _transport_server(handler)
+    try:
+        with pytest.raises(RuntimeError, match="model HTTP 400"):
+            _complete(server)
+    finally:
+        server.shutdown(); server.server_close(); thread.join()
+    assert len(seen) == 1
+
+
+def test_retries_never_outlive_the_caller_deadline():
+    seen = []
+
+    def handler(request):
+        seen.append(request.path)
+        request.send_response(503)
+        request.send_header("Retry-After", "30")
+        request.end_headers()
+        request.wfile.write(b"{}")
+
+    server, thread = _transport_server(handler)
+    started = time.monotonic()
+    try:
+        with pytest.raises(RuntimeError, match="no budget to retry"):
+            _complete(server, timeout=1)
+    finally:
+        server.shutdown(); server.server_close(); thread.join()
+    assert len(seen) == 1 and time.monotonic() - started < 5
 
 
 def test_process_timeout_is_bounded(tmp_path):
