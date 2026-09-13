@@ -776,3 +776,40 @@ def test_agent_files_must_be_readable_text(task):
     manifest.write_text(yaml.safe_dump(spec))
     assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output), "--dry-run"]) == 2
     assert not output.exists()
+
+
+def test_fusion_task_exposes_kernels_read_only_and_hides_the_adapter(task):
+    from kai_core.workspace import Workspace
+    manifest, config, output = task
+    spec = yaml.safe_load(manifest.read_text())
+    kernels = manifest.parent / "kernels"
+    kernels.mkdir()
+    (kernels / "scale.py").write_text("def scale(x): return 2 * x\n")
+    (kernels / "shift.py").write_text("def shift(x): return x + 1\n")
+    spec.update(kind="fusion", fusion={"intermediates": ["scaled"], "kernels": [
+        {"name": "scale", "files": ["kernels/scale.py"], "entry": "scale", "description": "doubles"},
+        {"name": "shift", "files": ["kernels/shift.py"], "entry": "shift", "description": "adds one"}]})
+    manifest.write_text(yaml.safe_dump(spec))
+    workspace = Workspace.create(manifest, output)
+    context = workspace.context(100000)
+    assert context["fusion"]["read_only_files"] == ["kernels/scale.py", "kernels/shift.py"]
+    assert [k["entry"] for k in context["fusion"]["kernels"]] == ["scale", "shift"]
+    assert set(context["task_sources"]) == {"kernels/scale.py", "kernels/shift.py"}
+    assert "adapter.py" not in context["task_sources"] and context["editable_files"] == ["solution.py"]
+    assert (output / "bundle/kernels/scale.py").exists()  # frozen with the benchmark
+    assert "kernels/scale.py" in json.loads((output / "source.json").read_text())["original_task_files"]
+    with pytest.raises(ValueError, match="only replace declared source files"):
+        workspace.candidate(0, workspace.baseline, {"hypothesis": "h", "files": {"kernels/scale.py": "def scale(x): return x\n"}})
+
+
+def test_fusion_kernels_cannot_also_be_implementation_files(task):
+    from kai_core.workspace import Workspace
+    manifest, config, output = task
+    spec = yaml.safe_load(manifest.read_text())
+    (manifest.parent / "other.py").write_text("X = 1\n")
+    spec.update(kind="fusion", fusion={"kernels": [
+        {"name": "sol", "files": ["solution.py"], "entry": "forward", "description": "the editable file itself"},
+        {"name": "other", "files": ["other.py"], "entry": "x", "description": "other"}]})
+    manifest.write_text(yaml.safe_dump(spec))
+    with pytest.raises(ValueError, match="read-only material"):
+        Workspace.create(manifest, output)

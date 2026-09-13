@@ -1,0 +1,65 @@
+schema_version: 1
+name: epilogue_fusion_bias_gelu_residual_v1
+kind: fusion
+description: Fuse a three-kernel FP32 epilogue, out = gelu(x + bias) + residual with the exact
+  erf GELU, for x and residual of shape [rows, cols] and bias of shape [cols]. The baseline
+  launches the three supplied kernels in sequence through two intermediate buffers in the
+  workspace. rows and cols vary across cases, including a column count that is not a
+  multiple of common vector widths. Output is compared with a PyTorch reference at
+  atol = rtol = 1e-5.
+fusion:
+  kernels:
+  - name: bias_add
+    files: [kernels/bias_add.cu]
+    entry: launch_bias_add
+    description: y[r, c] = x[r, c] + bias[c]
+  - name: gelu
+    files: [kernels/gelu.cu]
+    entry: launch_gelu
+    description: z = 0.5 * y * (1 + erf(y / sqrt(2)))
+  - name: residual_add
+    files: [kernels/residual_add.cu]
+    entry: launch_residual_add
+    description: out = z + residual
+  intermediates: [y, z]
+adapter: adapter.py:Epilogue
+implementation:
+  root: baseline
+  files:
+  - solution.cu
+benchmark_files:
+- bridge.cu
+- inputs.py
+- reference.py
+agent_files:
+- bridge.cu
+- description.md
+objective:
+  metric: operator_latency_ms
+  unit: ms
+  direction: minimize
+  scope: kernel
+  max_case_regression: 0.01
+measurement:
+  timer: cuda_event
+  device: 0
+  warmup: 10
+  blocks: 40
+  iterations: 10
+  confidence: 0.95
+  bootstrap_samples: 5000
+  boundary: GPU elapsed time between two external CUDA event record nodes captured
+    around exactly one complete pipeline invocation in the same CUDA Graph, whether it
+    launches three kernels or one. Graph submission, compilation, input/output/workspace
+    allocation, reset and validation are excluded. The SDK also records its outer
+    latency_ms as a diagnostic; only operator_latency_ms is scored.
+  cache_policy: Before every invocation, poison the output and write a separate 256 MiB
+    buffer to evict the inputs from L2. Input and workspace buffers are reused. No
+    profiler or clock locking.
+seed: 0
+options:
+  device: cuda:0
+  nvcc: nvcc
+  cuda_arch: sm_120
+  compile_timeout_seconds: 300
+  execution: graph_events

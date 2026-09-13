@@ -29,13 +29,17 @@ class Workspace:
         baseline = (manifest.parent / spec.implementation.root).resolve(strict=True)
         if root.resolve().is_relative_to(manifest.parent) or root.resolve().is_relative_to(baseline):
             raise ValueError("run directory must be outside the task and implementation directories")
-        task_files = file_inventory(manifest.parent, [
-            manifest.name, spec.adapter.rsplit(":", 1)[0], *spec.benchmark_files, *spec.agent_files])
-        for name in file_inventory(manifest.parent, spec.agent_files):
+        task_files = file_inventory(manifest.parent, [manifest.name, *spec.task_file_patterns()])
+        for name in file_inventory(manifest.parent, spec.agent_file_patterns()):
             try:
                 (manifest.parent / name).read_text(encoding="utf-8")
             except UnicodeDecodeError:
-                raise ValueError(f"agent_files must be UTF-8 text the model can read: {name}") from None
+                raise ValueError(f"agent-visible files must be UTF-8 text the model can read: {name}") from None
+        if spec.fusion is not None:
+            kernel_files = {(manifest.parent / name).resolve() for name in file_inventory(manifest.parent, spec.fusion.file_patterns())}
+            editable = {(baseline / name).resolve() for name in file_inventory(baseline, spec.implementation.files)}
+            if kernel_files & editable:
+                raise ValueError("fusion kernels are read-only material and cannot also be implementation files")
         implementation_files = file_inventory(baseline, spec.implementation.files)
         if any(name == "_baseline" or name.startswith("_baseline/") for name in task_files):
             raise ValueError("_baseline is reserved for the frozen implementation")
@@ -67,9 +71,7 @@ class Workspace:
         # Freeze declared sources, not bytecode/build artifacts legitimately
         # created by adapters. Owners must declare all oracle/build helpers.
         return json_fingerprint({
-            "benchmark": file_inventory(self.bundle, [
-                self.manifest.name, self.spec.adapter.rsplit(":", 1)[0],
-                *self.spec.benchmark_files, *self.spec.agent_files]),
+            "benchmark": file_inventory(self.bundle, [self.manifest.name, *self.spec.task_file_patterns()]),
             "implementation": file_inventory(self.baseline, self.spec.implementation.files),
         })
 
@@ -114,16 +116,29 @@ class Workspace:
         if sum(map(len, baseline.values())) > max_chars // 2:
             raise ValueError("implementation exceeds context limit; increase max_context_chars")
         # The agent sees the manifest, the editable sources and only the files the
-        # task owner listed in agent_files. The adapter, oracle and input generation
-        # stay hidden so candidates cannot specialize to the test distribution.
+        # task owner listed in agent_files (plus the kernels of a fusion task). The
+        # adapter, oracle and input generation stay hidden so candidates cannot
+        # specialize to the test distribution.
         task_files = {}
         remaining = max_chars // 2
-        names = sorted(file_inventory(self.bundle, self.spec.agent_files)) if self.spec.agent_files else []
+        patterns = self.spec.agent_file_patterns()
+        names = sorted(file_inventory(self.bundle, patterns)) if patterns else []
         for name in names:
             data = (self.bundle / name).read_text(encoding="utf-8")
             task_files[name] = data[:remaining]
             if len(data) > remaining:
                 task_files[name] += "\n[context limit: remaining file content omitted]"
             remaining = max(0, remaining - len(data))
-        return {"benchmark": self.spec.model_dump(), "editable_files": self.allowed,
-                "baseline_sources": baseline, "task_sources": task_files}
+        context = {"benchmark": self.spec.model_dump(), "editable_files": self.allowed,
+                   "baseline_sources": baseline, "task_sources": task_files}
+        if self.spec.fusion is not None:
+            context["fusion"] = {
+                "goal": "Replace the baseline's sequence of kernel launches with fewer, fused launches "
+                        "that compute the same result within the declared tolerance.",
+                "kernels": [{"name": kernel.name, "entry": kernel.entry, "description": kernel.description,
+                             "files": sorted(file_inventory(self.bundle, kernel.files))}
+                            for kernel in self.spec.fusion.kernels],
+                "intermediates": self.spec.fusion.intermediates,
+                "read_only_files": sorted(file_inventory(self.bundle, self.spec.fusion.file_patterns())),
+            }
+        return context

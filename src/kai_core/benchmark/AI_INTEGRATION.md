@@ -74,6 +74,20 @@ same declared shape distribution, but final confirmation must collect independen
 measurements after the candidate is frozen. Add boundary/tail/edge cases that are
 required by the real task; don't infer coverage from an arbitrary count of cases.
 
+### Task kinds
+
+`kind: operator` (the default) asks the agent to optimize the implementation
+files. `kind: fusion` asks it to fuse kernels the task owner already has: list
+them under `fusion.kernels` in execution order with `name`, `files`, the
+launcher `entry` and a one-line `description`, and name the buffers passed
+between them in `fusion.intermediates`. Kernel files are frozen with the
+benchmark, shown to the agent read-only, and rejected as candidate edits; the
+editable `implementation.files` hold the pipeline that launches them, which the
+baseline runs unfused and a candidate replaces with fused launches. The
+optimizer adds a structured `fusion` block to the agent context. Correctness
+still comes from an independent oracle, so a defective supplied kernel is
+caught at baseline validation. See `examples/fusion`.
+
 ## 4. Implement the adapter
 
 Subclass `kai_core.benchmark.Benchmark` and implement:

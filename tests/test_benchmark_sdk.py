@@ -623,5 +623,33 @@ def test_manifest_rejects_adapter_in_agent_files():
             "measurement": {"timer": "wall", "boundary": "b", "cache_policy": "c"}}
     BenchmarkSpec.model_validate({**base, "agent_files": ["INTERFACE.md", "bridge.cu"]})
     for pattern in (["adapter.py"], ["*.py"], ["INTERFACE.md", "adapter.py"]):
-        with pytest.raises(ValidationError, match="agent_files cannot include the adapter"):
+        with pytest.raises(ValidationError, match="cannot include the adapter"):
             BenchmarkSpec.model_validate({**base, "agent_files": pattern})
+
+
+def fusion_spec(**overrides):
+    from kai_core.benchmark.models import BenchmarkSpec
+    base = {"name": "epilogue", "description": "d", "kind": "fusion", "adapter": "adapter.py:Task",
+            "implementation": {"files": ["solution.cu"]},
+            "fusion": {"kernels": [{"name": "bias", "files": ["kernels/bias.cu"], "entry": "launch_bias", "description": "adds bias"},
+                                   {"name": "gelu", "files": ["kernels/gelu.cu"], "entry": "launch_gelu", "description": "gelu"}],
+                       "intermediates": ["y"]},
+            "objective": {"scope": "kernel", "unit": "ms"},
+            "measurement": {"timer": "wall", "boundary": "b", "cache_policy": "c"}}
+    return BenchmarkSpec.model_validate({**base, **overrides})
+
+
+def test_fusion_manifest_requires_kind_and_kernels_to_agree():
+    from pydantic import ValidationError
+    spec = fusion_spec()
+    assert spec.agent_file_patterns() == ["kernels/bias.cu", "kernels/gelu.cu"]
+    assert spec.task_file_patterns() == ["adapter.py", "kernels/bias.cu", "kernels/gelu.cu"]
+    with pytest.raises(ValidationError, match="kind: fusion requires a fusion section"):
+        fusion_spec(fusion=None)
+    with pytest.raises(ValidationError, match="kind: fusion requires a fusion section"):
+        fusion_spec(kind="operator")
+    with pytest.raises(ValidationError, match="unique"):
+        fusion_spec(fusion={"kernels": [{"name": "k", "files": ["a.cu"], "entry": "a", "description": "a"},
+                                        {"name": "k", "files": ["b.cu"], "entry": "b", "description": "b"}]})
+    with pytest.raises(ValidationError, match="at least 2"):
+        fusion_spec(fusion={"kernels": [{"name": "k", "files": ["a.cu"], "entry": "a", "description": "a"}]})

@@ -182,6 +182,12 @@ calibration is enabled), intervals,
 constraints, and verdict. Any declared source/benchmark change during execution
 invalidates the result. There is no automatic correction by dividing away A/A bias.
 
+`kind: fusion` declares a kernel-fusion task: `fusion.kernels` lists the supplied
+kernels in execution order (name, files, launcher entry, description) and
+`fusion.intermediates` the buffers passed between them. Kernel files are frozen,
+agent-visible and read-only; the editable implementation is the pipeline that
+launches them. `kind: operator` is the default single-implementation task.
+
 `agent_files` names the text files exposed to the optimization agent (interfaces,
 descriptions). It excludes the adapter, oracle and input generation by design, and
 the manifest rejects an `agent_files` entry that matches the adapter. Input synthesis

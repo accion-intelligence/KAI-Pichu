@@ -73,9 +73,36 @@ class ImplementationSpec(Model):
     files: list[str] = Field(min_length=1)
 
 
+class FusionKernel(Model):
+    """One user-supplied kernel that a fusion task asks the agent to fuse."""
+    name: str = Field(min_length=1)
+    files: list[str] = Field(min_length=1, description="Source files of this kernel; frozen, agent-visible, read-only")
+    entry: str = Field(min_length=1, description="Launcher symbol the unfused baseline calls")
+    description: str = Field(min_length=1)
+
+
+class FusionSpec(Model):
+    kernels: list[FusionKernel] = Field(min_length=2, description="Kernels in the baseline's execution order")
+    intermediates: list[str] = Field(default_factory=list, description=(
+        "Buffers handed from one kernel to the next; a fused implementation may keep them on chip"))
+
+    @model_validator(mode="after")
+    def check_unique_names(self) -> FusionSpec:
+        names = [kernel.name for kernel in self.kernels]
+        if len(set(names)) != len(names):
+            raise ValueError("fusion kernel names must be unique")
+        return self
+
+    def file_patterns(self) -> list[str]:
+        return [pattern for kernel in self.kernels for pattern in kernel.files]
+
+
 class BenchmarkSpec(Model):
     schema_version: Literal[1] = 1
     name: str = Field(min_length=1)
+    kind: Literal["operator", "fusion"] = Field(default="operator", description=(
+        "operator: optimize one implementation; fusion: fuse the user-supplied kernels listed under `fusion`"))
+    fusion: FusionSpec | None = None
     adapter: str = Field(description="Relative Python file and class, e.g. adapter.py:Task")
     implementation: ImplementationSpec
     benchmark_files: list[str] = Field(default_factory=list)
@@ -97,13 +124,24 @@ class BenchmarkSpec(Model):
         path = Path(file_name)
         if path.is_absolute() or ".." in path.parts:
             raise ValueError("adapter must be inside the benchmark directory")
-        for pattern in self.benchmark_files + self.agent_files + self.implementation.files:
+        if (self.kind == "fusion") != (self.fusion is not None):
+            raise ValueError("kind: fusion requires a fusion section listing the kernels, and vice versa")
+        for pattern in self.task_file_patterns() + self.implementation.files:
             if Path(pattern).is_absolute() or ".." in Path(pattern).parts:
                 raise ValueError("file patterns must be relative and cannot contain '..'")
         adapter_path = PurePosixPath(file_name)
-        if any(adapter_path.match(pattern) or fnmatchcase(file_name, pattern) for pattern in self.agent_files):
-            raise ValueError("agent_files cannot include the adapter; input synthesis and the oracle stay hidden from the agent")
+        if any(adapter_path.match(pattern) or fnmatchcase(file_name, pattern) for pattern in self.agent_file_patterns()):
+            raise ValueError("agent-visible files cannot include the adapter; input synthesis and the oracle stay hidden from the agent")
         return self
+
+    def agent_file_patterns(self) -> list[str]:
+        """Text the optimization agent may read: agent_files plus, for fusion tasks, the kernels to fuse."""
+        fusion_files = self.fusion.file_patterns() if self.fusion else []
+        return [*self.agent_files, *fusion_files]
+
+    def task_file_patterns(self) -> list[str]:
+        """Every declared task file besides the manifest: adapter, helpers, agent-visible files and fusion kernels."""
+        return [self.adapter.rsplit(":", 1)[0], *self.benchmark_files, *self.agent_file_patterns()]
 
 
 def load_spec(path: Path) -> BenchmarkSpec:

@@ -65,8 +65,7 @@ def file_inventory(root: Path, patterns: list[str]) -> dict[str, str]:
 
 
 def provenance(path: Path, spec: BenchmarkSpec, workspace: Path) -> dict[str, Any]:
-    adapter_file = spec.adapter.rsplit(":", 1)[0]
-    benchmark_files = file_inventory(path.parent, [path.name, adapter_file, *spec.benchmark_files])
+    benchmark_files = file_inventory(path.parent, [path.name, *spec.task_file_patterns()])
     implementation_files = file_inventory(workspace, spec.implementation.files)
     return {
         "benchmark_fingerprint": json_fingerprint(benchmark_files),
