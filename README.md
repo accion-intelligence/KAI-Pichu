@@ -125,9 +125,9 @@ Bring a new operator, an interesting failure, a better diagnostic strategy, or r
 
 ## Research and attribution
 
-The agent builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)** and the multi-agent planner/coder/verifier design of **[StitchCUDA](https://icml.cc/virtual/2026/poster/64924)** (ICML 2026), both co-authored by Shiyang Li. Its optimizer source history and retained MIT notices are documented in the repository. The LayerNorm task comes from **[CUDAHercules](https://arxiv.org/abs/2605.08467)** and uses a FlashAttention CUDA baseline.
+The agent builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)** and **[StitchCUDA](https://icml.cc/virtual/2026/poster/64924)** . Its optimizer source history and retained MIT notices are documented in the repository. Some example tasks comes from **[CUDAHercules](https://arxiv.org/abs/2605.08467)**.
 
-If these research components support your work, please cite the relevant papers:
+If KAI-Core supports your work, please cite the relevant papers:
 
 ```bibtex
 @misc{zhang2025cudaforge,
