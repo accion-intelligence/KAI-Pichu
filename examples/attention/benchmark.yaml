@@ -1,0 +1,51 @@
+schema_version: 1
+name: attention_fwd_fp16_d64_graph_events_v1
+description: FP16 scaled dot-product attention forward with head_dim 64. O = softmax(Q Kᵀ
+  · scale [+ causal mask]) V for Q, K, V of shape [batch, heads, seq, 64] in FP16; scale is
+  1/sqrt(64); the causal mask hides strictly-future keys. batch, heads, seq and the causal
+  flag vary across cases, including sequence lengths that are not multiples of common tile
+  sizes. Query magnitudes, key offsets and value tails vary, so softmax must be computed
+  in a numerically stable way. The FP16 output is compared with an independent FP16
+  reference (FP32 intermediates) at atol = rtol = 1e-3.
+adapter: adapter.py:Attention
+implementation:
+  root: baseline
+  files:
+  - solution.cu
+benchmark_files:
+- bridge.cu
+- inputs.py
+- reference.py
+agent_files:
+- bridge.cu
+- description.md
+objective:
+  metric: operator_latency_ms
+  unit: ms
+  direction: minimize
+  scope: kernel
+  max_case_regression: 0.01
+measurement:
+  timer: cuda_event
+  device: 0
+  warmup: 10
+  blocks: 40
+  iterations: 10
+  confidence: 0.95
+  bootstrap_samples: 5000
+  boundary: GPU elapsed time between two external CUDA event record nodes captured
+    around exactly one complete native operator in the same CUDA Graph. Graph submission,
+    compilation, input/output/workspace allocation, reset and validation are excluded.
+    The SDK also records its outer latency_ms as a diagnostic; only operator_latency_ms
+    is scored.
+  cache_policy: Before every invocation, poison the output and write a separate 256 MiB
+    buffer to evict Q, K and V from L2. Input and workspace buffers are reused. No
+    profiler or clock locking.
+seed: 0
+options:
+  device: cuda:0
+  nvcc: nvcc
+  cuda_arch: sm_120
+  compile_timeout_seconds: 300
+  execution: graph_events
+  head_dim: 64
