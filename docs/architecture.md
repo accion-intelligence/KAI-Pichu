@@ -7,12 +7,12 @@ Only the optimization loop chooses what implementation to propose next.
 ```mermaid
 flowchart LR
     T[User benchmark] --> F[Frozen task and baseline]
-    F --> V[SDK preflight and A/A]
+    F --> V[SDK preflight, optional A/A]
     V --> G[Generator]
     G --> C[Candidate workspace]
     C --> E[SDK subprocess: correctness and paired A/B]
     E -->|incorrect| R[Correctness judge and repair]
-    E -->|calibrated| P[Same-candidate NCU profile]
+    E -->|correct| P[Same-candidate NCU profile]
     P --> O[Small report overview]
     O --> J[Optimization judge]
     J -->|diagnostic question and selected queries| Q[Catalog, metrics, rules or source evidence]
@@ -61,7 +61,7 @@ constraints. A configured larger speedup target is checked during final acceptan
   wrong outputs, process crashes and timeouts produce explicit feedback.
 - GPU polling before, during and after evaluation rejects resource conflicts.
   This is not an exclusive lease and cannot observe all interference between polls.
-- A failed A/A pauses optimization, preserving the candidate and raw report.
+- A failed A/A, when calibration is enabled, pauses optimization, preserving the candidate and raw report.
 - The frozen benchmark/baseline hash is verified around evaluation and profiling.
 - Checkpoints are atomic and a local file lock prevents concurrent resume.
 - A reserved incomplete round is skipped after an interruption. It is retained

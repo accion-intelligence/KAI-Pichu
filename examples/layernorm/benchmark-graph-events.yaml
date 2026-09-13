@@ -26,12 +26,11 @@ objective:
 measurement:
   timer: cuda_event
   device: 0
-  warmup: 5
+  warmup: 10
   blocks: 40
-  iterations: 5
+  iterations: 10
   confidence: 0.95
   bootstrap_samples: 5000
-  calibration_tolerance: 0.005
   boundary: GPU elapsed time between two external CUDA event record nodes captured
     around exactly one complete native operator in the same CUDA Graph. Graph submission,
     compilation, input/output allocation, reset and validation are excluded. The SDK

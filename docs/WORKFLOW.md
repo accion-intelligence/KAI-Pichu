@@ -8,7 +8,7 @@ The agent separates **writing a candidate**, **deciding what to change next**, a
 
 The engineer defines the operator contract and supplies a runnable baseline, inputs, validator, objective, permitted source files, and measurement rules. Task authoring can be assisted by a coding agent using the packaged guide, schema, and templates. The optimizer itself consumes the resulting manifest and adapter.
 
-A run freezes the task and baseline into its own workspace. Before generating CUDA, it executes the baseline checks and A/A calibration on the search split. A failure here is a task or measurement problem, not evidence that generated code needs repair.
+A run freezes the task and baseline into its own workspace. Before generating CUDA, it executes the baseline checks on the search split, plus A/A calibration if the manifest enables it. A failure here is a task or measurement problem, not evidence that generated code needs repair.
 
 ## The first candidate
 
@@ -18,7 +18,7 @@ The generator receives the task description, current implementation source, hard
 
 If the current candidate cannot complete evaluation—for example, because it fails to build or fails correctness—the judge receives the current source and actual error feedback. It identifies one critical issue and a minimal fix hint. The generator uses this strategy to create the next candidate.
 
-This path does not treat a broken candidate as a performance optimization target. Conversely, A/A instability stops the run rather than triggering a code-repair loop.
+This path does not treat a broken candidate as a performance optimization target. Conversely, when calibration is enabled, A/A instability stops the run rather than triggering a code-repair loop.
 
 ## Feedback loop 2: investigate and optimize
 

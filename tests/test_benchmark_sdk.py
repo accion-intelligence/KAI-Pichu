@@ -238,8 +238,34 @@ def test_benchmark_maximize_direction(bundle):
     assert not result["acceptance"]["accepted"]
 
 
+def test_benchmark_calibration_is_off_by_default(bundle, monkeypatch):
+    manifest, candidate, _ = bundle
+    runner = Runner(manifest)
+    monkeypatch.setattr(runner, "_calibrate", lambda baseline: pytest.fail("A/A must not run unless enabled"))
+    result = runner.run(candidate)
+    assert result["status"] == "completed" and result["calibration"] == {
+        "enabled": False, "passed": True, "failing_cases": [],
+        "note": "A/A calibration is disabled (measurement.calibration: false)."}
+    preflight = Runner(manifest).validate()
+    assert preflight["status"] == "ready" and preflight["calibration"]["enabled"] is False
+
+
+def test_benchmark_enabled_calibration_measures_the_baseline_against_itself(bundle):
+    manifest, candidate, spec = bundle
+    spec["measurement"]["calibration"] = True
+    manifest.write_text(yaml.safe_dump(spec))
+    result = Runner(manifest).validate()
+    calibration = result["calibration"]
+    assert result["status"] == "ready" and calibration["enabled"] and calibration["passed"]
+    assert calibration["tolerance"] == 0.05 and len(calibration["records"]) == 4 * 4 * 2
+    assert calibration["summary"]["overall"]["speedup"] == pytest.approx(1)
+
+
 def test_benchmark_unstable_aa_blocks_candidate_measurement(bundle, monkeypatch):
-    runner = Runner(bundle[0])
+    manifest, candidate, spec = bundle
+    spec["measurement"]["calibration"] = True
+    manifest.write_text(yaml.safe_dump(spec))
+    runner = Runner(manifest)
     monkeypatch.setattr(runner, "_calibrate", lambda baseline: {"passed": False})
     monkeypatch.setattr(runner, "_paired", lambda *args, **kw: pytest.fail("candidate should not be measured"))
     result = runner.run(bundle[1])
@@ -272,7 +298,8 @@ def test_benchmark_paired_statistics_remove_balanced_log_drift():
 def test_benchmark_calibration_rejects_stable_bias(bundle, monkeypatch):
     runner = Runner(bundle[0])
     runner.cases = [Case(id="test")]
-    monkeypatch.setattr(runner, "_paired", lambda *args, **kw: paired_records(a=10.3, b=10))
+    # A stable 8% bias lies outside the default 5% calibration tolerance.
+    monkeypatch.setattr(runner, "_paired", lambda *args, **kw: paired_records(a=10.8, b=10))
     assert not runner._calibrate(None)["passed"]
 
 

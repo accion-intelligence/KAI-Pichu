@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument("--split", choices=("smoke", "search", "acceptance"), default="smoke")
         command.add_argument("--output", type=Path, required=True, help="New JSON report path (never overwritten)")
         if name == "validate":
-            command.add_argument("--checks-only", action="store_true", help="Run conformance checks without claiming calibration readiness")
+            command.add_argument("--checks-only", action="store_true", help="Run conformance checks only, without timing or A/A calibration")
         else:
             command.add_argument("--candidate", type=Path, required=True)
     args = parser.parse_args(argv)

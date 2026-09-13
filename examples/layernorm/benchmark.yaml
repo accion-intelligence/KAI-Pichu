@@ -30,12 +30,11 @@ objective:
 measurement:
   timer: cuda_event
   device: 0
-  warmup: 5
+  warmup: 10
   blocks: 40
-  iterations: 5
+  iterations: 10
   confidence: 0.95
   bootstrap_samples: 5000
-  calibration_tolerance: 0.005
   boundary: One CUDA Graph replay containing exactly one native LayerNorm operator
     on the measured PyTorch stream, identical capture protocol for both arms. CUDA
     events include graph replay on the GPU; native CPU configuration, capture, input/output

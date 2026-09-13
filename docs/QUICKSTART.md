@@ -60,7 +60,7 @@ python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml
   --checks-only --output task-checks.json
 ```
 
-This executes the task’s checks, which may require a GPU. It does not run A/A calibration. For a complete baseline preflight on the search cases:
+This executes the task’s checks, which may require a GPU, without timing. For a complete baseline preflight on the search cases (including A/A calibration if the manifest enables it):
 
 ```bash
 python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml \

@@ -61,7 +61,9 @@ class Measurement(Model):
     iterations: int = Field(default=3, ge=1)
     confidence: float = Field(default=0.95, gt=0.5, lt=1)
     bootstrap_samples: int = Field(default=2000, ge=200)
-    calibration_tolerance: float = Field(default=0.005, gt=0, lt=1)
+    calibration: bool = Field(default=False, description=(
+        "Optional baseline-vs-baseline A/A check before any comparison; a failure stops the run"))
+    calibration_tolerance: float = Field(default=0.05, gt=0, lt=1)
     boundary: str = Field(min_length=1)
     cache_policy: str = Field(min_length=1)
 

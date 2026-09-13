@@ -47,9 +47,9 @@ python -m kai_core benchmark validate examples/layernorm/benchmark-graph-events.
   --split search --output layernorm-preflight.json
 ```
 
-This runs task checks, baseline correctness, and A/A calibration using your GPU, with **no model calls**. Add `--checks-only` to skip calibration. It does not test your model endpoint or run the optimization loop.
+This runs task checks and baseline correctness using your GPU, with **no model calls**; if the manifest enables `measurement.calibration`, it also runs the A/A check. Add `--checks-only` to skip timing. It does not test your model endpoint or run the optimization loop.
 
-Use the graph-events manifest above. The example ships a second manifest at a wider measurement boundary; the two are not comparable, and submission-related idle gaps in the wider boundary can prevent A/A calibration from passing. [Which manifest to use →](examples/layernorm/README.md#which-manifest-to-use)
+Use the graph-events manifest above. The example ships a second manifest at a wider measurement boundary; the two are not comparable, and submission-related idle gaps in the wider boundary add noise to its timing. [Which manifest to use →](examples/layernorm/README.md#which-manifest-to-use)
 
 </details>
 
@@ -106,16 +106,16 @@ A successful command exit alone does not mean a speedup was accepted. `accepted`
 
 ## Measurements you can inspect
 
-The benchmark SDK checks correctness against your reference, probes the validator with deliberately invalid observations, calibrates the baseline against itself, and compares candidates using paired measurements with confidence intervals. Final acceptance repeats evaluation on the acceptance split; whether its cases differ from search is determined by your adapter.
+The benchmark SDK checks correctness against your reference, probes the validator with deliberately invalid observations, optionally calibrates the baseline against itself (`measurement.calibration`), and compares candidates using paired measurements with confidence intervals. Final acceptance repeats evaluation on the acceptance split; whether its cases differ from search is determined by your adapter.
 
-The SDK controls built-in timing; adapter-defined metrics require their own boundary review. Failed A/A calibration stops the run rather than triggering code repair. File allowlists and integrity checks help preserve the task, but **this is not a security sandbox**. [Measurement rules and execution risks →](docs/MEASUREMENT.md)
+The SDK controls built-in timing; adapter-defined metrics require their own boundary review. When A/A calibration is enabled, a failure stops the run rather than triggering code repair. File allowlists and integrity checks help preserve the task, but **this is not a security sandbox**. [Measurement rules and execution risks →](docs/MEASUREMENT.md)
 
 ## Documentation
 
 | You want to… | Start here |
 | --- | --- |
 | Define a task and run the agent | [Quickstart](docs/QUICKSTART.md) |
-| Explore the packaged task | [LayerNorm example](examples/layernorm/README.md) |
+| Explore the packaged tasks | [LayerNorm example](examples/layernorm/README.md), [FP16 attention example](examples/attention/README.md) |
 | Understand the agent’s decisions and outputs | [Workflow](docs/WORKFLOW.md) |
 | Understand correctness, timing, and acceptance | [Measurement](docs/MEASUREMENT.md) |
 
@@ -125,7 +125,7 @@ Bring a new operator, an interesting failure, a better diagnostic strategy, or r
 
 ## Research and attribution
 
-The agent builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)**, co-authored by Shiyang Li. Its optimizer source history and retained MIT notices are documented in the repository. The LayerNorm task comes from **[CUDAHercules](https://arxiv.org/abs/2605.08467)** and uses a FlashAttention CUDA baseline.
+The agent builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)** and the multi-agent planner/coder/verifier design of **[StitchCUDA](https://icml.cc/virtual/2026/poster/64924)** (ICML 2026), both co-authored by Shiyang Li. Its optimizer source history and retained MIT notices are documented in the repository. The LayerNorm task comes from **[CUDAHercules](https://arxiv.org/abs/2605.08467)** and uses a FlashAttention CUDA baseline.
 
 If these research components support your work, please cite the relevant papers:
 
@@ -135,6 +135,22 @@ If these research components support your work, please cite the relevant papers:
   author = {Zijian Zhang and Rong Wang and Shiyang Li and Yuebo Luo and Mingyi Hong and Caiwen Ding},
   year = {2025},
   eprint = {2511.01884},
+  archivePrefix = {arXiv}
+}
+
+@inproceedings{li2026stitchcuda,
+  title = {StitchCUDA: An Automated Multi-Agents End-to-End GPU Programming Framework with Rubric-based Agentic Reinforcement Learning},
+  author = {Shiyang Li and Zijian Zhang and Winson Chen and Yuebo Luo and Mingyi Hong and Caiwen Ding},
+  booktitle = {International Conference on Machine Learning (ICML)},
+  year = {2026},
+  url = {https://icml.cc/virtual/2026/poster/64924}
+}
+
+@misc{li2026cudahercules,
+  title = {CUDAHercules: Benchmarking Hardware-Aware Expert-level CUDA Optimization for LLMs},
+  author = {Shiyang Li and Zijian Zhang and Guangyan Sun and Yuebo Luo and Winson Chen and Yanzhi Wang and Mingyi Hong and Caiwen Ding},
+  year = {2026},
+  eprint = {2605.08467},
   archivePrefix = {arXiv}
 }
 ```

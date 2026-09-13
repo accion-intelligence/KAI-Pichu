@@ -9,7 +9,7 @@ remain usable without an optimization agent or model endpoint.
 A task owner supplies a project, representative workloads, correctness rules,
 and optimization objectives. A coding agent can implement the adapter using
 the [AI integration guide](../src/kai_core/benchmark/AI_INTEGRATION.md). KAI validates
-the adapter, calibrates measurement, and compares implementation workspaces
+the adapter, optionally calibrates measurement, and compares implementation workspaces
 without requiring an LLM.
 
 The benchmark must be useful independently of optimization. Its definition is
@@ -56,8 +56,8 @@ unsupported protocol versions fail. Export its JSON Schema with
 read manifest → enumerate deterministic cases → record source fingerprints
   → load baseline/candidate implementations
   → check input reproducibility, correctness, reset and invalid-output probes
-  → baseline A/A calibration
-  → paired A/B measurements, if calibrated
+  → baseline A/A calibration, if measurement.calibration is enabled
+  → paired A/B measurements
   → verify source fingerprints again → record scoped acceptance → cleanup
 ```
 
@@ -153,13 +153,14 @@ blocks, jointly across cases. They assume sufficiently independent blocks.
 They do not model cross-process/session drift. The intervals are pointwise,
 not a simultaneous multiple-case guarantee.
 
-A/A uses the SAME loaded baseline implementation in both arms, through the
-same adapter path with independently prepared fixtures. The overall interval
-and each case interval must fit wholly inside `1 ± calibration_tolerance`.
+A/A calibration is optional and off by default (`measurement.calibration`).
+When enabled, it uses the SAME loaded baseline implementation in both arms,
+through the same adapter path with independently prepared fixtures. The overall
+interval and each case interval must fit wholly inside `1 ± calibration_tolerance`.
 Checking only that the interval contains 1 would admit uninformative noise.
 Defaults: 20 blocks, 3 independently reset calls per arm, 5 warmups, 2000
-bootstrap draws, 95% confidence, and ±0.5% A/A tolerance. These are starting
-settings, not a certification of accuracy on all workloads.
+bootstrap draws, 95% confidence, and a ±5% A/A tolerance when enabled. These
+are starting settings, not a certification of accuracy on all workloads.
 
 For A/B, the lower speedup bound must meet `target_speedup`, or exceed 1 if
 there is no target. Each case must meet its regression constraint using the
@@ -176,7 +177,8 @@ target miss is not proof that no optimization exists.
 
 Reports include the full spec, case definitions and fingerprint, input
 fingerprints, source inventories/digests, SDK source digest/version, Python/host
-metadata, available timer/device metadata, raw A/A and A/B samples, intervals,
+metadata, available timer/device metadata, raw A/B samples (and A/A samples when
+calibration is enabled), intervals,
 constraints, and verdict. Any declared source/benchmark change during execution
 invalidates the result. There is no automatic correction by dividing away A/A bias.
 

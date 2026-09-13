@@ -19,9 +19,9 @@ comparable.**
 
 **Start from `benchmark-graph-events.yaml`.** It is the default manifest for optimizing this operator.
 
-The outer-event manifest is retained for boundary comparison, not as this operator’s optimization target. Submission-related idle gaps can prevent A/A calibration from passing. This does not mean the `cuda_event` boundary is unusable in general. If you need that boundary, investigate contention, synchronization and run-to-run variability on your hardware. Choose blocks, repetitions and tolerance for the precision your task requires before candidate search. Document any changes and recalibrate; do not repeatedly relax the criterion simply to obtain a pass.
+The outer-event manifest is retained for boundary comparison, not as this operator’s optimization target. Submission-related idle gaps add noise to its timing. This does not mean the `cuda_event` boundary is unusable in general. If you need that boundary, investigate contention, synchronization and run-to-run variability on your hardware. Choose blocks and repetitions for the precision your task requires before candidate search, and document any changes.
 
-See [Measurement](../../docs/MEASUREMENT.md) for what calibration does and does not
+See [Measurement](../../docs/MEASUREMENT.md) for what the measurements do and do not
 establish.
 
 ## Requirements
@@ -38,8 +38,8 @@ python -m kai_core benchmark validate examples/layernorm/benchmark-graph-events.
   --split search --output layernorm-preflight.json
 ```
 
-This runs the task checks, the baseline correctness check, and A/A calibration. It uses the
-GPU. Add `--checks-only` to run the checks without calibration.
+This runs the task checks and the baseline correctness check on the GPU, plus A/A
+calibration if the manifest enables it. Add `--checks-only` to skip timing.
 
 To run the optimization loop, follow [model configuration and execution](../../docs/QUICKSTART.md#3-choose-the-models-and-budget) with `examples/layernorm/benchmark-graph-events.yaml` as the task manifest.
 

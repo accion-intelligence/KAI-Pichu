@@ -31,21 +31,22 @@ Adapt the adapter and manifest to your project. Implement the entire task
 definition, including error probes, workload splits, source inventories, and
 state reset. `--checks-only` verifies wiring but explicitly leaves `ready=false`.
 
-## Calibrate and compare
+## Validate and compare
 
 ```bash
 python -m kai_core benchmark validate /tmp/my-benchmark/benchmark.yaml \
-  --split search --output /tmp/my-calibration.json
+  --split search --output /tmp/my-preflight.json
 
 # The candidate root contains the files listed in implementation.files.
 python -m kai_core benchmark run /tmp/my-benchmark/benchmark.yaml \
   --candidate /path/to/candidate --split search --output /tmp/my-comparison.json
 ```
 
-`run` checks both implementations and performs fresh baseline A/A calibration
-before measuring A/B. An unstable A/A prevents candidate performance acceptance.
-Inspect `calibration`, `comparison`, `acceptance`, and raw `records` in the report.
-Do not silently relax calibration tolerance merely to get a green result.
+`run` checks both implementations, performs baseline A/A calibration first if the
+manifest enables `measurement.calibration`, then measures A/B. An unstable A/A
+prevents candidate performance acceptance. Inspect `calibration`, `comparison`,
+`acceptance`, and raw `records` in the report. Do not relax the calibration
+tolerance merely to get a green result.
 
 All output paths must be new. The CLI refuses to overwrite a previous report
 or scaffold into an existing directory. Error reports include a structured
@@ -53,8 +54,8 @@ failure message. Exit codes are:
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Conformance checks passed, calibration ready, or a valid A/B comparison completed |
-| 1 | Calibration was unstable; no accepted optimization |
+| 0 | Conformance checks passed, preflight ready, or a valid A/B comparison completed |
+| 1 | Calibration was enabled and unstable; no accepted optimization |
 | 2 | Invalid configuration, build/execution/verification failure, or path error |
 
 Exit 0 for `run` does NOT mean the performance target was met. Check

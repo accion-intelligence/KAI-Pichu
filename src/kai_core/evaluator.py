@@ -90,7 +90,7 @@ def feedback(report: dict[str, Any]) -> dict[str, Any]:
             continue
         data = report[section]
         summary = data.get("summary", data)
-        result[section] = {key: data[key] for key in ("passed", "failing_cases", "tolerance") if key in data}
+        result[section] = {key: data[key] for key in ("enabled", "passed", "failing_cases", "tolerance") if key in data}
         if "overall" in summary:
             result[section]["overall"] = {key: summary["overall"][key] for key in ("speedup", "interval")}
     return result

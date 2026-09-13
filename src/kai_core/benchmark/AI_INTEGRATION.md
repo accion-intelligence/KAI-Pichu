@@ -150,19 +150,20 @@ software/hardware/clock conditions. Compare both variants in the same environmen
 The SDK's source fingerprints and partial environment metadata do not replace
 recording external data, dependency, driver, clock and server configuration.
 
-## 6. Run the integration checks and calibration
+## 6. Run the integration checks and preflight
 
 ```bash
 python -m kai_core benchmark validate /path/to/task/benchmark.yaml \
   --checks-only --output /tmp/task-checks.json
 python -m kai_core benchmark validate /path/to/task/benchmark.yaml \
-  --split search --output /tmp/task-calibration.json
+  --split search --output /tmp/task-preflight.json
 ```
 
 Use fresh output paths. Fix failed build, oracle, reset, reproducibility or mutation
-checks. A checks-only pass is not calibration readiness. Full validation performs
-paired A/A against the same baseline through identical adapter paths. The entire
-confidence interval must fit inside the declared tolerance, overall and per case.
+checks. A checks-only pass times nothing. Full validation also runs A/A calibration
+when the manifest enables `measurement.calibration`: paired baseline-vs-baseline
+measurements through identical adapter paths whose confidence intervals must fit
+inside the declared tolerance, overall and per case.
 If it fails, inspect order effects, warmup, state, synchronization, cache policy,
 resource contention and drift. Do not divide away bias or silently increase the
 tolerance until the command passes. Report remaining uncertainty to the user.
@@ -174,15 +175,15 @@ Mutation probes alone do not prove complete correctness or workspace routing.
 
 ## 7. Deliver a reviewable benchmark
 
-Deliver the bundle, declared requirements, commands, validation/calibration JSON,
+Deliver the bundle, declared requirements, commands, validation JSON,
 and a concise description of the workload, oracle, measurement boundary, coverage
-and remaining limitations. Distinguish CPU wiring tests from actual GPU calibration.
+and remaining limitations. Distinguish CPU wiring tests from actual GPU measurements.
 Do not claim GPU validation if only the CPU template was exercised.
 
 Freeze the benchmark definition before optimizing. The optimization agent may
 modify declared implementation files, not the oracle, metric, workload weights,
 input rules, or tolerance. A user-requested change to these creates a new task
-version and requires a new baseline/calibration.
+version and requires a new baseline preflight.
 
 To compare an implementation:
 

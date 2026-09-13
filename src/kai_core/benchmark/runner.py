@@ -1,4 +1,4 @@
-"""Deterministic validation, paired measurement, calibration, and acceptance."""
+"""Deterministic validation, paired measurement, optional calibration, and acceptance."""
 from __future__ import annotations
 
 from contextlib import ExitStack
@@ -21,11 +21,15 @@ class BenchmarkError(RuntimeError):
     pass
 
 
+SDK_METRICS = ("latency_ms", "throughput")  # Computed by the runner from its own timer.
+
+
 class Runner:
     """Run trusted task adapters. This is not a security/process sandbox.
 
-    Call validate() for conformance + A/A, or run(candidate) for a calibrated
-    A/B comparison. A failed A/A never produces an accepted optimization.
+    Call validate() for conformance checks (plus A/A calibration when the manifest
+    enables it), or run(candidate) for a paired A/B comparison. A failed A/A never
+    produces an accepted optimization.
     """
 
     def __init__(self, manifest: str | Path, *, split: str = "smoke"):
@@ -98,13 +102,17 @@ class Runner:
         if not validation.passed:
             raise BenchmarkError(f"{case.id}: correctness failed: {validation.message}; {validation.errors}")
         metrics = {key: finite_number(value) for key, value in observation.metrics.items()}
-        if any(key in metrics for key in ("latency_ms", "throughput")):
+        if any(key in metrics for key in SDK_METRICS):
             raise BenchmarkError("latency_ms and throughput are SDK-owned; use a distinct name for adapter metrics")
+        metric = self.spec.objective.metric
+        # An adapter-owned objective must be present on every invocation, timed or
+        # not, so conformance checks catch a missing metric before any timing runs.
+        if metric not in SDK_METRICS and metric not in metrics:
+            raise BenchmarkError(f"{case.id}: missing objective metric {metric!r}")
         if elapsed is not None:
             metrics["latency_ms"] = finite_number(elapsed, positive=True)
             if case.work_units is not None:
                 metrics["throughput"] = case.work_units * 1000 / elapsed
-            metric = self.spec.objective.metric
             if metric not in metrics:
                 raise BenchmarkError(f"{case.id}: missing objective metric {metric!r}")
             finite_number(metrics[metric], positive=True)
@@ -191,6 +199,13 @@ class Runner:
             bootstrap_samples=settings.bootstrap_samples, seed=self.spec.seed,
         )
 
+    def _calibration(self, baseline: Any) -> dict[str, Any]:
+        """The optional baseline-vs-baseline check; a disabled manifest records that explicitly."""
+        if not self.spec.measurement.calibration:
+            return {"enabled": False, "passed": True, "failing_cases": [],
+                    "note": "A/A calibration is disabled (measurement.calibration: false)."}
+        return {"enabled": True, **self._calibrate(baseline)}
+
     def _calibrate(self, baseline: Any) -> dict[str, Any]:
         records = self._paired(baseline, baseline, candidate_limits=False)
         summary = self._summarize(records)
@@ -232,7 +247,7 @@ class Runner:
             stack.callback(self.task.cleanup_implementation, baseline)
             report["checks"] = self._check_cases(baseline, probes=True)
             if not checks_only:
-                report["calibration"] = self._calibrate(baseline)
+                report["calibration"] = self._calibration(baseline)
         self._assert_unchanged(report["baseline"], self.baseline_root)
         report["ready"] = not checks_only and report["calibration"]["passed"]
         report["status"] = "checks_passed" if checks_only else "ready" if report["ready"] else "unstable"
@@ -251,7 +266,7 @@ class Runner:
             stack.callback(self.task.cleanup_implementation, implementation)
             report["checks"] = self._check_cases(baseline, probes=True)
             report["candidate_checks"] = self._check_cases(implementation, probes=False)
-            report["calibration"] = self._calibrate(baseline)
+            report["calibration"] = self._calibration(baseline)
             if report["calibration"]["passed"]:
                 records = self._paired(baseline, implementation, candidate_limits=True)
                 report["records"] = records

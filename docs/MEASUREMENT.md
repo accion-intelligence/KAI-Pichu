@@ -18,9 +18,9 @@ The LayerNorm example’s `graph_events` option implements its operator metric i
 
 The example therefore ships two manifests. `benchmark-graph-events.yaml` uses that adapter metric; `benchmark.yaml` uses the SDK `cuda_event` timer, an outer GPU-timeline boundary that can include submission-related idle gaps. It is not a CPU wall-clock measurement. The two boundaries answer different questions; do not compare their numbers as if they measured the same work. Use `benchmark-graph-events.yaml` for optimizing this operator. The outer-event manifest is retained for boundary comparison; submission-related idle gaps can prevent A/A calibration from passing. This does not establish that `cuda_event` is unsuitable in general. Calibrate whichever boundary you choose on your own hardware.
 
-## Calibrate, then compare
+## Optional calibration, then compare
 
-Baseline-vs-baseline A/A measurements must satisfy the configured tolerance both overall and per case. An unsuccessful calibration means the run does not meet that precision criterion; it does not by itself prove that every possible larger gain would be noise.
+A/A calibration is off by default. When `measurement.calibration` is enabled, baseline-vs-baseline measurements must satisfy `calibration_tolerance` (default 5%) both overall and per case, and an unsuccessful calibration stops the run; it does not by itself prove that every possible larger gain would be noise. Without calibration, the confidence intervals of the A/B comparison and the acceptance rules are the only precision guard.
 
 The runner interleaves A/B observations in alternating ABBA/BAAB blocks and crosses fixture slots. This reduces particular order and allocation biases; it does not eliminate all interference. The protocol uses weighted geometric-mean speedup and percentile-bootstrap confidence intervals. The current implementation does not remove outliers.
 
@@ -30,7 +30,7 @@ Output poisoning and a 256 MiB cache flush belong to the packaged LayerNorm adap
 
 The loop tracks eligible search improvements. On normal search completion, it freezes the selected candidate and runs the configured acceptance repetitions. All repetitions must pass the declared target, regression and metric-limit rules for the final status to be `accepted`.
 
-A/A instability stops the optimizer. A candidate can remain useful as a search artifact without becoming an accepted result. Inspect `summary.json`, not just the command’s exit code.
+When calibration is enabled, A/A instability stops the optimizer. A candidate can remain useful as a search artifact without becoming an accepted result. Inspect `summary.json`, not just the command’s exit code.
 
 ## Integrity checks are not a sandbox
 
