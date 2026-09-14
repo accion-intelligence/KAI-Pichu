@@ -4,9 +4,9 @@ kind: fusion
 description: Fuse a three-kernel FP32 epilogue, out = gelu(x + bias) + residual with the exact
   erf GELU, for x and residual of shape [rows, cols] and bias of shape [cols]. The baseline
   launches the three supplied kernels in sequence through two intermediate buffers in the
-  workspace. rows and cols vary across cases, including a column count that is not a
-  multiple of common vector widths. Output is compared with a PyTorch reference at
-  atol = rtol = 1e-5.
+  workspace. rows and cols vary across cases, including odd row and column counts, so
+  neither rows nor the total element count are multiples of any vector width. Output is
+  compared with a PyTorch reference at atol = rtol = 1e-5.
 fusion:
   kernels:
   - name: bias_add

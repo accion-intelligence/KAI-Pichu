@@ -36,12 +36,14 @@ the kernel list, entries and intermediates in addition to the sources.
 | Split | Cases |
 | --- | --- |
 | smoke | 1024×2048 |
-| search | 4096×4096 standard normal; 2048×3000 wide range |
-| acceptance | 4096×4096; 8192×2048 per-row offsets; 2048×3000 wide range; 1024×8192 dominant bias |
+| search | 4096×4096 standard normal; 2047×3001 wide range |
+| acceptance | 4096×4096; 8192×2048 per-row offsets; 2049×2999 wide range; 1024×8192 dominant bias |
 
-3000 columns are not a multiple of common vector widths, so a fused kernel with
-`float4` loads needs a tail path. The `dominant_bias` profile makes a fusion that
-drops the bias stage fail loudly; `wide_range` exercises GELU's saturated tails.
+The odd shapes leave `rows * cols` with a remainder for every vector width and
+start rows at unaligned addresses, so a fused kernel with `float4` loads needs
+alignment handling and a scalar tail in search and in acceptance alike. The
+`dominant_bias` profile makes a fusion that drops the bias stage fail loudly;
+`wide_range` exercises GELU's saturated tails.
 
 ## Correctness
 

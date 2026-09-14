@@ -1,8 +1,8 @@
 """Input distributions and case splits for the epilogue fusion task.
 
 x and residual are FP32 [rows, cols]; bias is FP32 [cols]. Shapes vary across
-cases, including a column count that is not a multiple of common vector widths,
-so a fused kernel cannot assume aligned rows. Values cover GELU's linear,
+cases, including odd row and column counts, so a fused kernel cannot assume
+aligned rows or a tail-free element count. Values cover GELU's linear,
 transition and saturated regions.
 
 This module is task-owner code. It is frozen with the benchmark but never
@@ -57,12 +57,14 @@ PROFILES: dict[str, Profile] = {
 }
 
 # (profile, seed, rows, cols). Acceptance uses profiles, seeds and shapes that
-# search never sees; 3000 columns are not a multiple of any common vector width.
+# search never sees. The odd row and column counts (2047 x 3001, 2049 x 2999) make
+# rows start at unaligned addresses and leave rows * cols with a remainder for
+# every vector width, so vectorized kernels need a real tail path in both splits.
 SPLITS: dict[str, list[tuple[str, int, int, int]]] = {
     "smoke": [("unit_normal", 0, 1024, 2048)],
-    "search": [("unit_normal", 11, 4096, 4096), ("wide_range", 12, 2048, 3000)],
+    "search": [("unit_normal", 11, 4096, 4096), ("wide_range", 12, 2047, 3001)],
     "acceptance": [("unit_normal", 1001, 4096, 4096), ("shifted_rows", 1002, 8192, 2048),
-                   ("wide_range", 1003, 2048, 3000), ("dominant_bias", 1004, 1024, 8192)],
+                   ("wide_range", 1003, 2049, 2999), ("dominant_bias", 1004, 1024, 8192)],
 }
 
 

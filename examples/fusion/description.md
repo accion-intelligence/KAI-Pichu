@@ -27,8 +27,9 @@ Keep FP32 arithmetic.
 
 - `x`, `residual`, `out`: FP32, contiguous, shape `[rows, cols]`, row-major.
 - `bias`: FP32, shape `[cols]`.
-- `rows` and `cols` vary between invocations; `cols` is not necessarily a
-  multiple of 4 or 8, so vectorized loads need a scalar tail or alignment check.
+- `rows` and `cols` vary between invocations and can both be odd, so rows do
+  not start at 16-byte boundaries and `rows * cols` is not a multiple of any
+  vector width. Vectorized loads need alignment handling and a scalar tail.
 - `out` is uninitialized on entry and must be completely written.
 - `workspace` holds at least `2 * rows * cols * 4` bytes with undefined contents.
   A fused implementation may ignore it.
