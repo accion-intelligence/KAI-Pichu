@@ -31,6 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     schema.add_argument("--output", type=Path)
     guide = commands.add_parser("guide", help="Print the benchmark authoring manual")
     guide.add_argument("--output", type=Path)
+    lint_command = commands.add_parser("lint", help="Static contract checks for a task; runs no workload and needs no GPU")
+    lint_command.add_argument("manifest", type=Path)
+    lint_command.add_argument("--output", type=Path, help="Optional JSON report path (never overwritten)")
     for name in ("validate", "run"):
         command = commands.add_parser(name)
         command.add_argument("manifest", type=Path)
@@ -60,6 +63,13 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(instructions)
             return 0
+        if args.command == "lint":
+            from .lint import lint, render
+            findings = lint(args.manifest)
+            print(render(findings))
+            if args.output:
+                _write_new(args.output, [{"level": f.level, "code": f.code, "message": f.message} for f in findings])
+            return 1 if any(f.level == "error" for f in findings) else 0
         if args.command == "schema":
             result: dict[str, Any] = BenchmarkSpec.model_json_schema()
             if args.output:
