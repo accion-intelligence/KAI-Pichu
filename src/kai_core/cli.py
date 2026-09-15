@@ -34,6 +34,11 @@ def main(argv: list[str] | None = None) -> int:
     config_command = commands.add_parser("config", help="Export an optimizer config template or JSON Schema")
     config_command.add_argument("--output", required=True, type=Path)
     config_command.add_argument("--schema", action="store_true")
+    inspect_command = commands.add_parser("inspect", help="Read a run directory: rounds, verdicts and why a candidate was not selected")
+    inspect_command.add_argument("run", type=Path)
+    inspect_command.add_argument("--round", type=int, help="Show one round's hypothesis, judge strategy and verdict")
+    inspect_command.add_argument("--diff", action="store_true", help="Print the best candidate's patch")
+    inspect_command.add_argument("--json", action="store_true", help="Emit the parsed rounds as JSON")
     profile = commands.add_parser("profile", help="Query an existing NCU report without running a GPU workload")
     profile.add_argument("report", type=Path, nargs="?")
     profile.add_argument("--guide", action="store_true", help="Print the packaged AI profiling guide")
@@ -48,6 +53,26 @@ def main(argv: list[str] | None = None) -> int:
     profile.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     try:
+        if args.command == "inspect":
+            from .inspect import detail, load, overview
+            run = load(args.run.expanduser().resolve(strict=True))
+            if args.diff:
+                patch = run["root"] / "best_search.patch"
+                if not patch.is_file():
+                    raise ValueError("this run has no best_search.patch; no candidate was selected")
+                print(patch.read_text(encoding="utf-8"), end="")
+            elif args.json:
+                print(json.dumps({"status": run["state"].get("status"),
+                                  "rounds": [{"round": row.id, "phase": row.phase, "status": row.status,
+                                              "score": row.score, "interval": row.interval,
+                                              "selected": row.selected, "reasons": row.reasons,
+                                              "hypothesis": row.hypothesis} for row in run["rounds"]]},
+                                 indent=2))
+            elif args.round is not None:
+                print(detail(run, args.round))
+            else:
+                print(overview(run))
+            return 0
         if args.command == "profile":
             from .config import ProfileConfig
             from .io import parse_object, write_json
