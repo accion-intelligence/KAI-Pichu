@@ -19,7 +19,9 @@ class ModelConfig(ConfigModel):
     base_url: str = ""
     api_key_env: str = Field(default="KAI_CORE_API_KEY",
         description="Environment variable holding the bearer token; empty string means the endpoint needs no key")
-    max_tokens: int = Field(default=8192, ge=1)
+    # The generator returns complete replacement text for every file it touches,
+    # and for a reasoning provider this budget is shared with thinking tokens.
+    max_tokens: int = Field(default=16384, ge=1)
     temperature: float | None = Field(default=0.2, ge=0)
     timeout_seconds: float = Field(default=120, gt=0)
     extra_body: dict[str, Any] = Field(default_factory=dict)

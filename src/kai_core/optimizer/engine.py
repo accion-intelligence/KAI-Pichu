@@ -17,7 +17,7 @@ from ..benchmark.loading import file_inventory
 from ..config import OptimizeConfig, require_api_keys
 from ..evaluator import Evaluator, feedback
 from ..io import parse_object, write_json
-from ..models import ModelClient
+from ..models import ModelClient, ModelReplyError
 from ..profiling import ProfileQuery
 from ..workspace import Workspace
 from .individual import KernelIndividual
@@ -101,6 +101,12 @@ class OptimizationLoop:
         write_json(path.with_suffix(".request.json"), {"role": role, "messages": request})
         try:
             response = self.clients[role].complete(request, index=role_index, timeout=remaining)
+        except ModelReplyError as error:
+            # A call was made and answered; the answer is unusable. The caller
+            # repairs this within the round budget, as it already does for a
+            # malformed candidate. The call stays charged either way.
+            write_json(path.with_suffix(".error.json"), {"error_type": type(error).__name__, "message": str(error)})
+            raise
         except Exception as error:
             write_json(path.with_suffix(".error.json"), {"error_type": type(error).__name__, "message": str(error)})
             raise StopRun("model_error", str(error)) from error
@@ -162,7 +168,9 @@ class OptimizationLoop:
             if not candidate.exists():
                 shutil.copytree(anchor_path, candidate)
             reply = {"hypothesis": "invalid model response"}
-            report = {"status": "error", "error_type": "CandidateFormatError", "message": str(error)}
+            # Name the actual fault so the next round is told what to change: a
+            # truncated reply needs a shorter one, not a differently formatted one.
+            report = {"status": "error", "error_type": type(error).__name__, "message": str(error)}
         else:
             report = self._evaluate(f"round-{index:04d}", candidate, "search")
         score = report.get("comparison", {}).get("overall", {}).get("speedup")

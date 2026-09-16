@@ -34,6 +34,17 @@ def retry_delay(error: HTTPError | None, attempt: int) -> float:
     return min(BACKOFF_SECONDS * 2 ** attempt, MAX_BACKOFF_SECONDS)
 
 
+class ModelReplyError(ValueError):
+    """The model answered, and the answer cannot be used.
+
+    Truncation, a content filter, an empty body or a response the provider marks
+    incomplete all mean a call was made and produced something unusable. That is
+    the generator's existing repair case, not a transport fault, so it must reach
+    the caller instead of ending the run. A ValueError subclass so existing
+    handlers keep working.
+    """
+
+
 class ModelClient:
     def __init__(self, config: ModelConfig):
         self.config = config
@@ -94,7 +105,7 @@ class ModelClient:
             time.sleep(delay)
         if config.provider == "responses":
             if value.get("status") != "completed":
-                raise ValueError(f"model response incomplete: {value.get('status')}; {value.get('incomplete_details')}")
+                raise ModelReplyError(f"model response incomplete: {value.get('status')}; {value.get('incomplete_details')}")
             output_messages = [item for item in value.get("output", [])
                                if item.get("type") == "message" and item.get("role") == "assistant"]
             final_messages = [item for item in output_messages if item.get("phase") == "final_answer"]
@@ -107,20 +118,20 @@ class ModelClient:
             # Some completed responses repeat an identical final message with a
             # different message ID. Consume it once, retaining both raw messages.
             if len(texts) != 1:
-                raise ValueError("model response must contain one final answer message")
+                raise ModelReplyError("model response must contain one final answer message")
             content = texts.pop()
             if not content.strip():
-                raise ValueError("model returned no textual candidate/strategy")
+                raise ModelReplyError("model returned no textual candidate/strategy")
             return {"text": content, "usage": value.get("usage", {}),
                     "provider": config.provider, "model": config.model,
                     "response_id": value.get("id"), "finish_reason": value["status"],
                     "transport_attempts": attempt + 1, "output_messages": output_messages}
         choice = value["choices"][0]
         if choice.get("finish_reason") in ("length", "content_filter"):
-            raise ValueError(f"model response incomplete: {choice['finish_reason']}")
+            raise ModelReplyError(f"model response incomplete: {choice['finish_reason']}")
         content = choice["message"].get("content")
         if not isinstance(content, str) or not content.strip():
-            raise ValueError("model returned no textual candidate/strategy")
+            raise ModelReplyError("model returned no textual candidate/strategy")
         return {"text": content, "usage": value.get("usage", {}),
                 "provider": config.provider, "model": config.model,
                 "transport_attempts": attempt + 1, "finish_reason": choice.get("finish_reason")}
@@ -162,12 +173,12 @@ class ModelClient:
         if message.stop_reason == "refusal":
             details = getattr(message, "stop_details", None)
             category = getattr(details, "category", None) or "unspecified"
-            raise ValueError(f"model refused the request (category: {category})")
+            raise ModelReplyError(f"model refused the request (category: {category})")
         if message.stop_reason == "max_tokens":
-            raise ValueError("model response incomplete: max_tokens")
+            raise ModelReplyError("model response incomplete: max_tokens")
         content = "".join(block.text for block in message.content if block.type == "text")
         if not content.strip():
-            raise ValueError("model returned no textual candidate/strategy")
+            raise ModelReplyError("model returned no textual candidate/strategy")
         return {"text": content, "usage": message.usage.model_dump(), "provider": config.provider,
                 "model": message.model, "response_id": message.id, "finish_reason": message.stop_reason,
                 "content_blocks": [block.model_dump() for block in message.content]}
