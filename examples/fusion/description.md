@@ -19,7 +19,9 @@ material; `solution.cu` is the only file that may change.
 
 Produce the same `out` with fewer, fused launches. A single kernel that reads
 `x`, `bias` and `residual` once and writes `out` once is the natural target;
-partial fusion is acceptable if it is faster. Keep the exact erf-based GELU
+partial fusion is acceptable if it is faster. `solution.cu` may be rewritten
+from scratch: it does not have to keep the `#include`s or the three launcher
+calls, only the `launch_epilogue` entry point below. Keep the exact erf-based GELU
 (`0.5 * v * (1 + erff(v / sqrt(2)))`); the tanh approximation fails validation.
 Keep FP32 arithmetic.
 
