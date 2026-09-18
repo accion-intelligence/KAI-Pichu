@@ -32,7 +32,7 @@ Do not upload credentials, proprietary source, customer inputs, or unsanitized m
      --split search --output task-preflight.json
    ```
 
-   Checks may execute GPU workloads. The second command also calibrates the baseline. Use new output paths when rerunning; neither command exercises the model-driven optimization loop.
+   Checks may execute GPU workloads. The second command also times the baseline. Use new output paths when rerunning; neither command exercises the model-driven optimization loop.
 
 4. Update documentation when commands, task contracts, configuration or outputs change. State required hardware and model costs for live tests.
 5. Preserve upstream attribution and license notices. Identify the origin and license of contributed third-party code.

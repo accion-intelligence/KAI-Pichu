@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument("--template", choices=("stateless", "stateful", "command"), default="stateless")
     schema = commands.add_parser("schema", help="Print the versioned manifest JSON Schema")
     schema.add_argument("--output", type=Path)
-    guide = commands.add_parser("guide", help="Print the tool-agnostic AI integration instructions")
+    guide = commands.add_parser("guide", help="Print the benchmark authoring manual")
     guide.add_argument("--output", type=Path)
     for name in ("validate", "run"):
         command = commands.add_parser(name)
@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument("--split", choices=("smoke", "search", "acceptance"), default="smoke")
         command.add_argument("--output", type=Path, required=True, help="New JSON report path (never overwritten)")
         if name == "validate":
-            command.add_argument("--checks-only", action="store_true", help="Run conformance checks only, without timing or A/A calibration")
+            command.add_argument("--checks-only", action="store_true", help="Run conformance checks only, without timing the baseline")
         else:
             command.add_argument("--candidate", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.output is not None and args.output.exists():
             raise ValueError(f"output already exists: {args.output}")
         if args.command == "guide":
-            instructions = (Path(__file__).parent / "AI_INTEGRATION.md").read_text(encoding="utf-8")
+            instructions = (Path(__file__).parent / "MANUAL.md").read_text(encoding="utf-8")
             if args.output:
                 _write_new(args.output, instructions, text=True)
             else:

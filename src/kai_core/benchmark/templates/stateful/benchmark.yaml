@@ -15,6 +15,5 @@ measurement:
   timer: wall
   boundary: One complete sequence of updates; initial state restoration and input generation excluded.
   cache_policy: Reuse the input sequence; reset state before every invocation, including warmup.
-  # calibration: true  # Optional baseline-vs-baseline A/A check; calibration_tolerance defaults to 0.05.
 options:
   steps: 4096

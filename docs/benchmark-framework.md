@@ -8,8 +8,8 @@ remain usable without an optimization agent or model endpoint.
 
 A task owner supplies a project, representative workloads, correctness rules,
 and optimization objectives. A coding agent can implement the adapter using
-the [AI integration guide](../src/kai_core/benchmark/AI_INTEGRATION.md). KAI validates
-the adapter, optionally calibrates measurement, and compares implementation workspaces
+the [benchmark manual](../src/kai_core/benchmark/MANUAL.md). KAI validates
+the adapter, times the baseline, and compares implementation workspaces
 without requiring an LLM.
 
 The benchmark must be useful independently of optimization. Its definition is
@@ -22,7 +22,7 @@ optimization policy, or a model prompt.
 | --- | --- | --- |
 | Benchmark definition | Workload distribution, initial state, oracle, measured boundary, objectives and constraints | Task owner and their coding agent |
 | Implementation | Source code that computes the declared workload | Project maintainer / optimization agent |
-| Measurement SDK | Lifecycle, paired ordering, timing, raw samples, calibration and statistics | KAI |
+| Measurement SDK | Lifecycle, paired ordering, timing, raw samples and statistics | KAI |
 | Optimization engine | Hypotheses, edits, resource allocation and selection | KAI Core optimizer |
 
 Correctness is checked before ranking. A task that cannot establish correctness
@@ -56,7 +56,7 @@ unsupported protocol versions fail. Export its JSON Schema with
 read manifest → enumerate deterministic cases → record source fingerprints
   → load baseline/candidate implementations
   → check input reproducibility, correctness, reset and invalid-output probes
-  → baseline A/A calibration, if measurement.calibration is enabled
+  → baseline timing pass on every case (validate without --checks-only)
   → paired A/B measurements
   → verify source fingerprints again → record scoped acceptance → cleanup
 ```
@@ -153,14 +153,13 @@ blocks, jointly across cases. They assume sufficiently independent blocks.
 They do not model cross-process/session drift. The intervals are pointwise,
 not a simultaneous multiple-case guarantee.
 
-A/A calibration is optional and off by default (`measurement.calibration`).
-When enabled, it uses the SAME loaded baseline implementation in both arms,
-through the same adapter path with independently prepared fixtures. The overall
-interval and each case interval must fit wholly inside `1 ± calibration_tolerance`.
-Checking only that the interval contains 1 would admit uninformative noise.
-Defaults: 20 blocks, 3 independently reset calls per arm, 5 warmups, 2000
-bootstrap draws, 95% confidence, and a ±5% A/A tolerance when enabled. These
-are starting settings, not a certification of accuracy on all workloads.
+Preflight (`validate` without `--checks-only`) times the baseline alone on every
+case with the manifest's warmup and sample counts and reports its per-case
+statistics; it proves the baseline can be timed within the declared boundary and
+shows what is being measured, without judging measurement stability. Defaults:
+20 blocks, 3 independently reset calls per arm, 5 warmups, 2000 bootstrap
+draws and 95% confidence. These are starting settings, not a certification of
+accuracy on all workloads.
 
 For A/B, the lower speedup bound must meet `target_speedup`, or exceed 1 if
 there is no target. Each case must meet its regression constraint using the
@@ -177,10 +176,9 @@ target miss is not proof that no optimization exists.
 
 Reports include the full spec, case definitions and fingerprint, input
 fingerprints, source inventories/digests, SDK source digest/version, Python/host
-metadata, available timer/device metadata, raw A/B samples (and A/A samples when
-calibration is enabled), intervals,
+metadata, available timer/device metadata, raw A/B samples, intervals,
 constraints, and verdict. Any declared source/benchmark change during execution
-invalidates the result. There is no automatic correction by dividing away A/A bias.
+invalidates the result. There is no automatic correction for measurement bias.
 
 `kind: fusion` declares a kernel-fusion task: `fusion.kernels` lists the supplied
 kernels in execution order (name, files, launcher entry, description) and

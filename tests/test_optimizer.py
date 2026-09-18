@@ -122,16 +122,6 @@ def test_resource_busy_preflight_uses_no_model_budget(task, monkeypatch):
     assert result["llm_calls"] == 0 and not result["final_accepted"]
 
 
-def test_failed_calibration_is_not_a_code_repair(task, monkeypatch):
-    manifest, config_path, output = task
-    config = OptimizeConfig.model_validate(yaml.safe_load(config_path.read_text()))
-    loop = OptimizationLoop(Workspace.create(manifest, output), config)
-    monkeypatch.setattr(loop.evaluator, "evaluate", lambda *a, **k: {"status": "unstable"})
-    result = loop.run()
-    assert result["status"] == "measurement_unstable"
-    assert result["llm_calls"] == 0
-
-
 def test_final_acceptance_failure_never_creates_accepted_export(task, monkeypatch):
     manifest, config_path, output = task
     config = OptimizeConfig.model_validate(yaml.safe_load(config_path.read_text()))
@@ -930,3 +920,49 @@ def test_resume_accepts_a_changed_budget_but_not_a_changed_contract(task):
     config["max_context_chars"] = 99999
     different = config_path.with_name("different.yaml"); different.write_text(yaml.safe_dump(config))
     assert main(["optimize", str(manifest), "--config", str(different), "--output", str(output), "--resume"]) == 2
+
+
+def test_weakest_case_is_the_lowest_per_case_speedup():
+    from kai_core.optimizer.engine import weakest_case
+
+    def arms(baseline, candidate):
+        return {"baseline": {"median": baseline}, "candidate": {"median": candidate}}
+
+    metrics = {"objective": {"direction": "minimize", "per_case": {
+        "fast": arms(1.0, 0.25), "slow": arms(1.0, 0.9), "medium": arms(1.0, 0.5)}}}
+    assert weakest_case(metrics) == "slow"
+    maximize = {"objective": {"direction": "maximize", "per_case": {
+        "fast": arms(1.0, 4.0), "slow": arms(1.0, 1.1)}}}
+    assert weakest_case(maximize) == "slow"
+    assert weakest_case({"status": "error"}) is None
+
+
+def test_profile_captures_the_weakest_case_unless_a_case_is_pinned(task, monkeypatch):
+    from kai_core import evaluator
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["profile"] = {"enabled": True}
+    values["resources"] = {"gpu_device": 0}
+    workspace = Workspace.create(manifest, output)
+    monkeypatch.setattr(evaluator.shutil, "which", lambda executable: "/test/ncu")
+    commands = []
+
+    def fake_ncu(command, **kwargs):
+        commands.append(command)
+        return {"status": "failed", "returncode": 1}
+
+    monkeypatch.setattr(evaluator, "run_process", fake_ncu)
+    profiler = evaluator.Evaluator(workspace, OptimizeConfig.model_validate(values))
+    result = profiler.profile("weakest", workspace.baseline, timeout=5, weakest_case="two")
+    assert result["case_selection"] == {"case_id": "two", "policy": "lowest_measured_speedup"}
+    assert commands[-1][commands[-1].index("--case") + 1] == "two"
+
+    result = profiler.profile("default", workspace.baseline, timeout=5)
+    assert result["case_selection"] == {"case_id": None, "policy": "first_search_case"}
+    assert "--case" not in commands[-1]
+
+    values["profile"]["case_id"] = "one"
+    pinned = evaluator.Evaluator(workspace, OptimizeConfig.model_validate(values))
+    result = pinned.profile("pinned", workspace.baseline, timeout=5, weakest_case="two")
+    assert result["case_selection"] == {"case_id": "one", "policy": "configured"}
+    assert commands[-1][commands[-1].index("--case") + 1] == "one"

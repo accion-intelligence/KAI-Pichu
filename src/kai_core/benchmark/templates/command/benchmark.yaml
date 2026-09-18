@@ -15,7 +15,6 @@ measurement:
   timer: wall
   boundary: Complete subprocess request including launch, parsing, computation, synchronization, and output; compilation excluded.
   cache_policy: New process for every invocation; operating-system caches remain uncontrolled and warm.
-  # calibration: true  # Optional baseline-vs-baseline A/A check; calibration_tolerance defaults to 0.05.
 options:
   compiler: c++
   compile_flags: [-O2, -x, c++]

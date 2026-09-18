@@ -1,4 +1,4 @@
-"""Deterministic validation, paired measurement, optional calibration, and acceptance."""
+"""Deterministic validation, baseline timing, paired measurement, and acceptance."""
 from __future__ import annotations
 
 from contextlib import ExitStack
@@ -27,9 +27,8 @@ SDK_METRICS = ("latency_ms", "throughput")  # Computed by the runner from its ow
 class Runner:
     """Run trusted task adapters. This is not a security/process sandbox.
 
-    Call validate() for conformance checks (plus A/A calibration when the manifest
-    enables it), or run(candidate) for a paired A/B comparison. A failed A/A never
-    produces an accepted optimization.
+    Call validate() for conformance checks plus a timing pass over the baseline,
+    or run(candidate) for a paired A/B comparison against the baseline.
     """
 
     def __init__(self, manifest: str | Path, *, split: str = "smoke"):
@@ -199,24 +198,30 @@ class Runner:
             bootstrap_samples=settings.bootstrap_samples, seed=self.spec.seed,
         )
 
-    def _calibration(self, baseline: Any) -> dict[str, Any]:
-        """The optional baseline-vs-baseline check; a disabled manifest records that explicitly."""
-        if not self.spec.measurement.calibration:
-            return {"enabled": False, "passed": True, "failing_cases": [],
-                    "note": "A/A calibration is disabled (measurement.calibration: false)."}
-        return {"enabled": True, **self._calibrate(baseline)}
+    def _time_baseline(self, baseline: Any) -> dict[str, Any]:
+        """Time the baseline alone on every case, with the manifest's warmup and sample counts.
 
-    def _calibrate(self, baseline: Any) -> dict[str, Any]:
-        records = self._paired(baseline, baseline, candidate_limits=False)
-        summary = self._summarize(records)
-        tolerance = self.spec.measurement.calibration_tolerance
-        estimates = [("overall", summary["overall"]), *summary["cases"].items()]
-        failing = [name for name, estimate in estimates
-                   if not (1 - tolerance <= estimate["interval"][0]
-                           and estimate["interval"][1] <= 1 + tolerance)]
-        return {"passed": not failing, "failing_cases": failing, "tolerance": tolerance,
-                "summary": summary, "records": records,
-                "note": "Pointwise intervals; not a simultaneous suite-wide confidence guarantee."}
+        Preflight uses this to prove that the baseline can be timed within the
+        declared boundary and to show the task owner what it measures; it makes
+        no judgment about measurement stability.
+        """
+        settings = self.spec.measurement
+        metric = self.spec.objective.metric
+        per_case: dict[str, dict[str, float | int]] = {}
+        with ExitStack() as stack:
+            for case in self.cases:
+                fixture = self._fixture(case, stack)
+                for _ in range(settings.warmup):
+                    self._invoke(case, baseline, fixture, timed=False)
+                values = []
+                for _ in range(settings.blocks * settings.iterations):
+                    _, metrics = self._invoke(case, baseline, fixture, timed=True)
+                    if metric not in metrics:
+                        raise BenchmarkError(f"{case.id}: baseline did not report the objective metric {metric!r}")
+                    values.append(float(metrics[metric]))
+                per_case[case.id] = {"mean": statistics.fmean(values), "median": statistics.median(values),
+                                     "min": min(values), "max": max(values), "samples": len(values)}
+        return {"metric": metric, "unit": self.spec.objective.unit, "per_case": per_case}
 
     def _report(self) -> dict[str, Any]:
         return {
@@ -247,10 +252,10 @@ class Runner:
             stack.callback(self.task.cleanup_implementation, baseline)
             report["checks"] = self._check_cases(baseline, probes=True)
             if not checks_only:
-                report["calibration"] = self._calibration(baseline)
+                report["baseline_timing"] = self._time_baseline(baseline)
         self._assert_unchanged(report["baseline"], self.baseline_root)
-        report["ready"] = not checks_only and report["calibration"]["passed"]
-        report["status"] = "checks_passed" if checks_only else "ready" if report["ready"] else "unstable"
+        report["ready"] = not checks_only
+        report["status"] = "ready" if report["ready"] else "checks_passed"
         return report
 
     def run(self, candidate: str | Path) -> dict[str, Any]:
@@ -266,16 +271,11 @@ class Runner:
             stack.callback(self.task.cleanup_implementation, implementation)
             report["checks"] = self._check_cases(baseline, probes=True)
             report["candidate_checks"] = self._check_cases(implementation, probes=False)
-            report["calibration"] = self._calibration(baseline)
-            if report["calibration"]["passed"]:
-                records = self._paired(baseline, implementation, candidate_limits=True)
-                report["records"] = records
-                report["comparison"] = self._summarize(records)
-                report["acceptance"] = self._acceptance(report["comparison"])
-                report["status"] = "completed"
-            else:
-                report["status"] = "calibration_failed"
-                report["acceptance"] = {"accepted": False, "reason": "A/A calibration failed"}
+            records = self._paired(baseline, implementation, candidate_limits=True)
+            report["records"] = records
+            report["comparison"] = self._summarize(records)
+            report["acceptance"] = self._acceptance(report["comparison"])
+            report["status"] = "completed"
         self._assert_unchanged(report["baseline"], self.baseline_root)
         self._assert_unchanged(report["candidate"], candidate_root)
         return report

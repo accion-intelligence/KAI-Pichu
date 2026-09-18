@@ -1,4 +1,4 @@
-"""Summarize every attempt, including calibration failures, from raw run reports."""
+"""Summarize every attempt from raw run reports."""
 from __future__ import annotations
 
 import argparse
@@ -29,12 +29,9 @@ def summarize(root: Path) -> dict[str, Any]:
                     if values:
                         means[arm] = statistics.mean(values)
             overall = report.get("comparison", {}).get("overall", {})
-            calibration = report.get("calibration", {})
             reports.append({
                 "path": str(path.relative_to(root)), "status": report["status"],
                 "split": report.get("split"), "metric": metric,
-                "calibration_passed": calibration.get("passed"),
-                "calibration_interval": calibration.get("summary", {}).get("overall", {}).get("interval"),
                 "speedup": overall.get("speedup"), "interval": overall.get("interval"),
                 "mean_baseline_ms": means.get("a"), "mean_candidate_ms": means.get("b"),
                 "accepted": report.get("acceptance", {}).get("accepted", False),
@@ -48,7 +45,7 @@ def summarize(root: Path) -> dict[str, Any]:
                          "rounds_completed": len(state["history"]), "elapsed_seconds": state["elapsed_seconds"],
                          "usage": usage, "reports": reports})
     return {"attempts": attempts, "optimizer_usage": totals,
-            "note": "Includes failed calibrations and all attempts; API connectivity smoke usage is separate."}
+            "note": "Includes every attempt; API connectivity smoke usage is separate."}
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 [project]
 name = "kai-core"
 version = "0.1.0"
-description = "Single-operator GPU optimization with calibrated benchmarks and an agent optimization loop."
+description = "Single-operator GPU optimization with paired benchmarks and an agent optimization loop."
 readme = "README.md"
 license = "Apache-2.0 AND MIT"
 license-files = ["LICENSE", "licenses/*", "THIRD_PARTY_NOTICES.md"]
@@ -25,6 +25,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "kai_core" = ["*.md"]
 "kai_core.benchmark" = ["*.md", "templates/**/*"]
+"kai_core.skills" = ["*/SKILL.md", "*/**/*"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["**/__pycache__/*", "**/*.pyc"]

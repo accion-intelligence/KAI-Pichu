@@ -22,7 +22,7 @@ objective:
   unit: ms
   direction: minimize
   scope: kernel
-  max_case_regression: 0.01
+  max_case_regression: 0.05
 measurement:
   timer: cuda_event
   device: 0

@@ -85,14 +85,11 @@ def feedback(report: dict[str, Any]) -> dict[str, Any]:
     objective = objective_measurements(report)
     if objective is not None:
         result["objective"] = objective
-    for section in ("calibration", "comparison"):
-        if section not in report:
-            continue
-        data = report[section]
-        summary = data.get("summary", data)
-        result[section] = {key: data[key] for key in ("enabled", "passed", "failing_cases", "tolerance") if key in data}
-        if "overall" in summary:
-            result[section]["overall"] = {key: summary["overall"][key] for key in ("speedup", "interval")}
+    if "comparison" in report:
+        overall = report["comparison"]["overall"]
+        result["comparison"] = {"overall": {key: overall[key] for key in ("speedup", "interval")}}
+    if "baseline_timing" in report:
+        result["baseline_timing"] = report["baseline_timing"]
     return result
 
 
@@ -133,7 +130,14 @@ class Evaluator:
         report["report_path"] = str(output.relative_to(workspace.root))
         return report
 
-    def profile(self, tag: str, candidate: Path, *, timeout: float) -> dict[str, Any]:
+    def profile(self, tag: str, candidate: Path, *, timeout: float,
+                weakest_case: str | None = None) -> dict[str, Any]:
+        """Capture one NCU profile of the candidate on a single search case.
+
+        A candidate may dispatch different code by input shape, and one shape's
+        profile says nothing about another's, so the capture follows the case
+        where the candidate gained least unless the configuration pins a case.
+        """
         settings = self.config.profile
         if not settings.enabled:
             return {"status": "disabled", "message": "No NCU measurements are available."}
@@ -159,13 +163,15 @@ class Evaluator:
             command.extend("--section=" + section for section in settings.sections)
         command += [sys.executable, "-m", "kai_core.profile_worker", str(self.workspace.manifest),
                     "--candidate", str(candidate), "--output", str(metadata)]
-        if settings.case_id:
-            command += ["--case", settings.case_id]
+        case_selection = self._profile_case_selection(weakest_case)
+        if case_selection["case_id"]:
+            command += ["--case", case_selection["case_id"]]
         execution = run_process(command, cwd=self.workspace.root, log=output / "process.log", timeout=timeout,
                                 resources=self.config.resources, gpu_device=self.gpu_device)
         result = {"status": "profiled" if execution["status"] == "completed" and execution["returncode"] == 0 else "profile_failed",
                   "implementation_fingerprint": fingerprint, "process": execution,
                   "profile_id": tag, "report_path": str(report_path), "csv_path": str(csv),
+                  "case_selection": case_selection,
                   "capture": {"metrics": settings.metrics, "sections": [] if settings.metrics else settings.sections}}
         if metadata.exists():
             result["workload"] = json.loads(metadata.read_text())
@@ -183,6 +189,14 @@ class Evaluator:
                 result["evidence"] = {"status": "unavailable", "message": str(error)}
         write_json(output / "profile.json", result)
         return result
+
+    def _profile_case_selection(self, weakest_case: str | None) -> dict[str, Any]:
+        configured = self.config.profile.case_id
+        if configured:
+            return {"case_id": configured, "policy": "configured"}
+        if weakest_case:
+            return {"case_id": weakest_case, "policy": "lowest_measured_speedup"}
+        return {"case_id": None, "policy": "first_search_case"}
 
     def query_profile(self, profile_id: str, request: dict[str, Any], *, timeout: float) -> dict[str, Any]:
         reader = self._profiles.get(profile_id)

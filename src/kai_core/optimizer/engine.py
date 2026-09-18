@@ -24,6 +24,26 @@ from .individual import KernelIndividual
 from .prompts import GENERATOR, OPTIMIZATION_JUDGE, REPAIR_JUDGE, messages, strategy
 
 
+def weakest_case(metrics: dict[str, Any]) -> str | None:
+    """The search case where a completed candidate gained least over the baseline.
+
+    Uses the per-case medians of the scored metric from the candidate's own
+    feedback; a candidate that is fast on one shape and slow on another needs
+    profiling evidence from the slow one.
+    """
+    objective = metrics.get("objective") or {}
+    per_case = objective.get("per_case") or {}
+    minimize = objective.get("direction", "minimize") == "minimize"
+
+    def speedup(arms: dict[str, Any]) -> float:
+        baseline, candidate = arms["baseline"]["median"], arms["candidate"]["median"]
+        return baseline / candidate if minimize else candidate / baseline
+
+    gains = {case: speedup(arms) for case, arms in per_case.items()
+             if arms["baseline"]["median"] > 0 and arms["candidate"]["median"] > 0}
+    return min(gains, key=gains.get) if gains else None
+
+
 class StopRun(RuntimeError):
     def __init__(self, status: str, message: str):
         super().__init__(message)
@@ -99,8 +119,6 @@ class OptimizationLoop:
         self._verify()
         if report["status"] in ("resource_busy", "resource_error"):
             raise StopRun(report["status"], report.get("message", "GPU resource check failed"))
-        if report["status"] in ("unstable", "calibration_failed"):
-            raise StopRun("measurement_unstable", "A/A calibration failed; no code repair is justified by this result")
         return report
 
     def _path(self, individual: dict[str, Any] | None) -> Path:
@@ -126,7 +144,8 @@ class OptimizationLoop:
         if current is not None:
             if not repair:
                 profile = self.evaluator.profile(f"round-{index:04d}", anchor_path,
-                                                 timeout=min(self.config.budget.evaluation_seconds, self._remaining()))
+                                                 timeout=min(self.config.budget.evaluation_seconds, self._remaining()),
+                                                 weakest_case=weakest_case(anchor["metrics"]))
                 self._verify()
                 if profile.get("process", {}).get("status") in ("resource_busy", "resource_error"):
                     raise StopRun(profile["process"]["status"], "resource conflict during profiling")
@@ -295,7 +314,7 @@ class OptimizationLoop:
                     self.state.pop("message", None)
                     baseline = self._evaluate("preflight", None, "search")
                     if baseline["status"] != "ready":
-                        raise StopRun("benchmark_error", baseline.get("message", "baseline did not pass conformance/calibration"))
+                        raise StopRun("benchmark_error", baseline.get("message", "baseline did not pass its conformance checks or timing"))
                     task_context["hardware"] = baseline.get("timing_environment", {})
                     for index in range(self.state["next_round"], self.config.budget.rounds):
                         self._remaining()

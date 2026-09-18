@@ -27,7 +27,7 @@ Return only JSON: {"critical_issue": "...", "why_it_matters": "...",
 "minimal_fix_hint": "..."}."""
 
 OPTIMIZATION_JUDGE = """You are a senior CUDA performance engineer. Read the
-frozen benchmark, current implementation, calibrated performance results and
+frozen benchmark, current implementation, measured performance results and
 hardware feedback. Identify exactly one bottleneck hypothesis and one concrete
 optimization method. Prefer measured evidence. If profiling is unavailable,
 state that the mechanism is unverified; do not invent counters or limitations.

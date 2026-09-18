@@ -8,7 +8,7 @@ The agent’s measurement system supports the engineering loop. It answers wheth
 
 The adapter owns input preparation, the reference, tolerances, result validation, state reset and synchronization. It must provide deliberately invalid observations that its validator rejects. These probes expose some weak validators; they are not a proof of complete coverage.
 
-The engineer also defines the cases returned for each split. An acceptance split is a separate execution path, but it is only meaningfully held out if the adapter supplies appropriate distinct cases.
+The engineer also defines the cases returned for each split. An acceptance split is a separate execution path, but it is only meaningfully held out if the adapter supplies distinct cases, and it is only a fair test if those cases stay inside the ranges the search cases span: acceptance changes the points, seeds and value distributions, not the range of any input dimension. A shape that appears only in acceptance tests a regime the agent never measured.
 
 ## Establish the measurement boundary
 
@@ -16,9 +16,9 @@ The manifest names the objective and its scope, units, direction, boundary and c
 
 The packaged examples implement their `operator_latency_ms` metric inside the adapter with the `graph_events` option: two external CUDA events recorded inside a CUDA Graph around exactly one operator call. It is not a third SDK timer enum. That latency excludes host submission, compilation and graph capture, and it must not be presented as end-to-end application latency. The SDK's own `cuda_event` timer measures an outer GPU-timeline boundary that can include submission-related idle gaps; the two boundaries answer different questions, so do not compare their numbers as if they measured the same work.
 
-## Optional calibration, then compare
+## Time the baseline, then compare
 
-A/A calibration is off by default. When `measurement.calibration` is enabled, baseline-vs-baseline measurements must satisfy `calibration_tolerance` (default 5%) both overall and per case, and an unsuccessful calibration stops the run; it does not by itself prove that every possible larger gain would be noise. Without calibration, the confidence intervals of the A/B comparison and the acceptance rules are the only precision guard.
+Preflight times the baseline alone on every case and reports per-case statistics, so the task owner sees what the boundary measures before any model call. There is no baseline-versus-baseline stability gate: the confidence intervals of the paired A/B comparison and the acceptance rules are the precision guard.
 
 The runner interleaves A/B observations in alternating ABBA/BAAB blocks and crosses fixture slots. This reduces particular order and allocation biases; it does not eliminate all interference. The protocol uses weighted geometric-mean speedup and percentile-bootstrap confidence intervals. The current implementation does not remove outliers.
 
@@ -28,7 +28,7 @@ Output poisoning and a 256 MiB cache flush belong to the packaged example adapte
 
 The loop tracks eligible search improvements. On normal search completion, it freezes the selected candidate and runs the configured acceptance repetitions. All repetitions must pass the declared target, regression and metric-limit rules for the final status to be `accepted`.
 
-When calibration is enabled, A/A instability stops the optimizer. A candidate can remain useful as a search artifact without becoming an accepted result. Inspect `summary.json`, not just the command’s exit code.
+A candidate can remain useful as a search artifact without becoming an accepted result. Inspect `summary.json`, not just the command’s exit code.
 
 ## Integrity checks are not a sandbox
 

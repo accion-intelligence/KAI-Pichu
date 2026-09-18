@@ -66,7 +66,6 @@ def test_benchmark_custom_metric_and_stateful_lifecycle(bundle):
     manifest, candidate, _ = bundle
     result = Runner(manifest).run(candidate)
     assert result["status"] == "completed"
-    assert result["calibration"]["passed"]
     assert result["comparison"]["overall"]["speedup"] == pytest.approx(2)
     assert result["acceptance"]["accepted"]
     assert len(result["records"]) == 4 * 4 * 2
@@ -104,7 +103,6 @@ def test_benchmark_fixture_cost_does_not_become_implementation_speedup(bundle):
     runner.task.prepare = prepare
     runner.task.run = run
     result = runner.run(bundle[1])
-    assert result["calibration"]["passed"]
     assert result["comparison"]["overall"]["interval"] == pytest.approx([2.0, 2.0])
     for block in range(4):
         for case in runner.cases:
@@ -164,7 +162,7 @@ def test_benchmark_checks_only_does_not_claim_readiness(bundle):
     result = Runner(bundle[0]).validate(checks_only=True)
     assert result["status"] == "checks_passed"
     assert result["ready"] is False
-    assert "calibration" not in result
+    assert "baseline_timing" not in result
 
 
 def test_benchmark_task_mutation_invalidates_measurement(bundle):
@@ -238,39 +236,25 @@ def test_benchmark_maximize_direction(bundle):
     assert not result["acceptance"]["accepted"]
 
 
-def test_benchmark_calibration_is_off_by_default(bundle, monkeypatch):
-    manifest, candidate, _ = bundle
-    runner = Runner(manifest)
-    monkeypatch.setattr(runner, "_calibrate", lambda baseline: pytest.fail("A/A must not run unless enabled"))
-    result = runner.run(candidate)
-    assert result["status"] == "completed" and result["calibration"] == {
-        "enabled": False, "passed": True, "failing_cases": [],
-        "note": "A/A calibration is disabled (measurement.calibration: false)."}
-    preflight = Runner(manifest).validate()
-    assert preflight["status"] == "ready" and preflight["calibration"]["enabled"] is False
-
-
-def test_benchmark_enabled_calibration_measures_the_baseline_against_itself(bundle):
-    manifest, candidate, spec = bundle
-    spec["measurement"]["calibration"] = True
-    manifest.write_text(yaml.safe_dump(spec))
+def test_benchmark_preflight_times_the_baseline_on_every_case(bundle):
+    manifest, _, spec = bundle
     result = Runner(manifest).validate()
-    calibration = result["calibration"]
-    assert result["status"] == "ready" and calibration["enabled"] and calibration["passed"]
-    assert calibration["tolerance"] == 0.05 and len(calibration["records"]) == 4 * 4 * 2
-    assert calibration["summary"]["overall"]["speedup"] == pytest.approx(1)
+    assert result["status"] == "ready" and result["ready"] is True
+    timing = result["baseline_timing"]
+    assert timing["metric"] == spec["objective"]["metric"] and timing["unit"] == spec["objective"]["unit"]
+    settings = spec["measurement"]
+    for case in result["cases"]:
+        stats = timing["per_case"][case["id"]]
+        assert stats["samples"] == settings["blocks"] * settings["iterations"]
+        assert stats["min"] <= stats["median"] <= stats["max"]
 
 
-def test_benchmark_unstable_aa_blocks_candidate_measurement(bundle, monkeypatch):
-    manifest, candidate, spec = bundle
+def test_benchmark_manifest_rejects_removed_calibration_fields(bundle):
+    manifest, _, spec = bundle
     spec["measurement"]["calibration"] = True
     manifest.write_text(yaml.safe_dump(spec))
-    runner = Runner(manifest)
-    monkeypatch.setattr(runner, "_calibrate", lambda baseline: {"passed": False})
-    monkeypatch.setattr(runner, "_paired", lambda *args, **kw: pytest.fail("candidate should not be measured"))
-    result = runner.run(bundle[1])
-    assert result["status"] == "calibration_failed"
-    assert not result["acceptance"]["accepted"]
+    with pytest.raises(Exception, match="calibration"):
+        Runner(manifest)
 
 
 def paired_records(a=10.0, b=5.0):
@@ -293,25 +277,6 @@ def test_benchmark_paired_statistics_remove_balanced_log_drift():
                        confidence=0.95, bootstrap_samples=200, seed=0)
     assert result["overall"]["speedup"] == pytest.approx(2)
     assert result["overall"]["interval"] == pytest.approx([2, 2])
-
-
-def test_benchmark_calibration_rejects_stable_bias(bundle, monkeypatch):
-    runner = Runner(bundle[0])
-    runner.cases = [Case(id="test")]
-    # A stable 8% bias lies outside the default 5% calibration tolerance.
-    monkeypatch.setattr(runner, "_paired", lambda *args, **kw: paired_records(a=10.8, b=10))
-    assert not runner._calibrate(None)["passed"]
-
-
-def test_benchmark_calibration_rejects_wide_interval(bundle, monkeypatch):
-    runner = Runner(bundle[0])
-    runner.cases = [Case(id="test")]
-    records = paired_records(a=10, b=10)
-    for row in records:
-        if row["arm"] == "b":
-            row["metrics"]["cost"] *= 0.8 if row["block"] % 2 else 1.25
-    monkeypatch.setattr(runner, "_paired", lambda *args, **kw: records)
-    assert not runner._calibrate(None)["passed"]
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), True, "1"])
@@ -379,11 +344,12 @@ def test_benchmark_cli_schema_and_existing_output_preserved(tmp_path):
     assert path.read_bytes() == original
 
 
-def test_benchmark_ai_guide_is_shipped_and_exportable(tmp_path):
-    path = tmp_path / "instructions.md"
+def test_benchmark_manual_is_shipped_and_exportable(tmp_path):
+    path = tmp_path / "manual.md"
     assert main(["guide", "--output", str(path)]) == 0
-    assert "invalid_observations" in path.read_text()
-    assert "kai_core benchmark validate" in path.read_text()
+    manual = path.read_text()
+    assert "invalid_observations" in manual and "benchmark validate" in manual
+    assert "Search and acceptance must span the same ranges" in manual
 
 
 def test_benchmark_report_write_is_exclusive(tmp_path):

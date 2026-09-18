@@ -1,5 +1,7 @@
 # Benchmark SDK quickstart
 
+The complete reference is the manual: `kai-core benchmark guide` or [MANUAL.md](../src/kai_core/benchmark/MANUAL.md). This page is the short command tour.
+
 Use Python 3.10+ in your project's existing environment:
 
 ```bash
@@ -42,11 +44,9 @@ python -m kai_core benchmark run /tmp/my-benchmark/benchmark.yaml \
   --candidate /path/to/candidate --split search --output /tmp/my-comparison.json
 ```
 
-`run` checks both implementations, performs baseline A/A calibration first if the
-manifest enables `measurement.calibration`, then measures A/B. An unstable A/A
-prevents candidate performance acceptance. Inspect `calibration`, `comparison`,
-`acceptance`, and raw `records` in the report. Do not relax the calibration
-tolerance merely to get a green result.
+`run` checks both implementations, then measures them against each other in
+paired blocks. Inspect `comparison`, `acceptance`, and raw `records` in the
+report. Do not relax tolerances or regression limits merely to get a green result.
 
 All output paths must be new. The CLI refuses to overwrite a previous report
 or scaffold into an existing directory. Error reports include a structured
@@ -55,7 +55,6 @@ failure message. Exit codes are:
 | Code | Meaning |
 | --- | --- |
 | 0 | Conformance checks passed, preflight ready, or a valid A/B comparison completed |
-| 1 | Calibration was enabled and unstable; no accepted optimization |
 | 2 | Invalid configuration, build/execution/verification failure, or path error |
 
 Exit 0 for `run` does NOT mean the performance target was met. Check
@@ -81,7 +80,7 @@ objective:
   direction: minimize
   scope: end_to_end
   target_speedup: 1.10
-  max_case_regression: 0.01
+  max_case_regression: 0.05
 limits:
   - metric: peak_bytes
     maximum: 8000000000

@@ -15,7 +15,6 @@ measurement:
   timer: wall
   boundary: One vector addition including dispatch and output allocation; inputs and validation excluded.
   cache_policy: Reuse input buffers after warmup; this models a warm repeated operator.
-  # calibration: true  # Optional baseline-vs-baseline A/A check; calibration_tolerance defaults to 0.05.
 options:
   device: cpu
   size: 4096

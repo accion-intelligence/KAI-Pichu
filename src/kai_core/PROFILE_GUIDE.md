@@ -189,5 +189,5 @@ optimizer capture; resume retains reserved model charges.
 This catalog describes **already collected evidence**. Device-wide collection
 capability discovery and model-triggered recapture are not implemented here.
 Use the installed NCU section/metric inventory to configure a new capture when
-evidence is missing. NVIDIA rules provide hypotheses; correctness, calibrated
+evidence is missing. NVIDIA rules provide hypotheses; correctness, measured
 A/B and independent acceptance decide whether an optimization works.

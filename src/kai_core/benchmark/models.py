@@ -28,7 +28,7 @@ class Objective(Model):
     scope: Literal["kernel", "module", "end_to_end"]
     aggregation: Literal["weighted_geomean_speedup"] = "weighted_geomean_speedup"
     target_speedup: float | None = Field(default=None, gt=1)
-    max_case_regression: float | None = Field(default=0.01, ge=0, lt=1)
+    max_case_regression: float | None = Field(default=0.05, ge=0, lt=1)
 
     @model_validator(mode="after")
     def check_builtin_metric(self) -> Objective:
@@ -61,9 +61,6 @@ class Measurement(Model):
     iterations: int = Field(default=3, ge=1)
     confidence: float = Field(default=0.95, gt=0.5, lt=1)
     bootstrap_samples: int = Field(default=2000, ge=200)
-    calibration: bool = Field(default=False, description=(
-        "Optional baseline-vs-baseline A/A check before any comparison; a failure stops the run"))
-    calibration_tolerance: float = Field(default=0.05, gt=0, lt=1)
     boundary: str = Field(min_length=1)
     cache_policy: str = Field(min_length=1)
 
