@@ -1,0 +1,49 @@
+schema_version: 1
+name: depthwise_conv7x7_nchw_fp16_graph_events_v1
+description: Depthwise 7x7 convolution forward, stride 1, same (zero) padding, no bias, in
+  NCHW FP16 with FP32 accumulation. y[n, c, i, j] = sum over 7x7 taps of
+  x[n, c, i+di-3, j+dj-3] * w[c, di, dj], with out-of-image taps reading zero. N, C, H and W
+  vary across cases, including odd spatial sizes whose image rows are not 16-byte aligned.
+  Output is compared with a PyTorch FP32 reference rounded to FP16 at atol = rtol = 2e-3.
+adapter: adapter.py:DepthwiseConv
+implementation:
+  root: baseline
+  files:
+  - solution.cu
+benchmark_files:
+- bridge.cu
+- inputs.py
+- reference.py
+agent_files:
+- bridge.cu
+- description.md
+objective:
+  metric: operator_latency_ms
+  unit: ms
+  direction: minimize
+  scope: kernel
+  max_case_regression: 0.01
+measurement:
+  timer: cuda_event
+  device: 0
+  warmup: 10
+  blocks: 40
+  iterations: 10
+  confidence: 0.95
+  bootstrap_samples: 5000
+  boundary: GPU elapsed time between two external CUDA event record nodes captured
+    around exactly one complete convolution call in the same CUDA Graph. Graph submission,
+    compilation, cuDNN algorithm search, input/output/workspace allocation, reset and
+    validation are excluded. The SDK also records its outer latency_ms as a diagnostic;
+    only operator_latency_ms is scored.
+  cache_policy: Before every invocation, poison the output and write a separate 256 MiB
+    buffer to evict the activations and weights from L2. Input and workspace buffers are
+    reused. No profiler or clock locking.
+seed: 0
+options:
+  device: cuda:0
+  nvcc: nvcc
+  cuda_arch: sm_120
+  compile_timeout_seconds: 300
+  execution: graph_events
+  # cudnn_home: /path/to/cudnn  # Defaults to the cuDNN bundled with PyTorch.

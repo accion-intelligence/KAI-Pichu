@@ -115,7 +115,7 @@ The SDK controls built-in timing; adapter-defined metrics require their own boun
 | You want to… | Start here |
 | --- | --- |
 | Define a task and run the agent | [Quickstart](docs/QUICKSTART.md) |
-| Explore the packaged tasks | [LayerNorm example](examples/layernorm/README.md), [FP16 attention example](examples/attention/README.md) |
+| Explore the packaged tasks | [LayerNorm example](examples/layernorm/README.md), [FP16 attention example](examples/attention/README.md), [depthwise 7×7 convolution against cuDNN](examples/depthwise_conv/README.md) |
 | Fuse kernels you already have | [Epilogue fusion example](examples/fusion/README.md) (`kind: fusion`) |
 | Understand the agent’s decisions and outputs | [Workflow](docs/WORKFLOW.md) |
 | Understand correctness, timing, and acceptance | [Measurement](docs/MEASUREMENT.md) |
