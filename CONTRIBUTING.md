@@ -1,4 +1,4 @@
-# Contributing to KAI Core Agent
+# Contributing to KAI Pichu
 
 [← README](README.md)
 

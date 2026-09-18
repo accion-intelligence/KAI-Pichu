@@ -1,10 +1,10 @@
-# KAI Core Agent
+# KAI Pichu
 
 ### An open-source CUDA kernel agent.
 
 [Get started](#get-started) · [How it works](#how-it-works) · [Documentation](#documentation) · [Research](#research-and-attribution)
 
-At Accion Intelligence, we’re building KAI to make GPU engineering accessible from a specification. **KAI Core Agent is our open-source CUDA kernel agent:** it generates, debugs, profiles, and optimizes one GPU operator at a time.
+At Accion Intelligence, we’re building KAI to make GPU engineering accessible from a specification. **KAI Pichu is our open-source CUDA kernel agent:** it generates, debugs, profiles, and optimizes one GPU operator at a time. It is the first of three tiers: **KAI Pichu** (open, single operator), **KAI Pikachu** (open, end to end) and **KAI Raichu** (managed). The Python package and CLI are `kai_core` / `kai-core`.
 
 Define what your operator must do, how to check it, and what performance it should beat. The agent generates a candidate, diagnoses failures, repairs the code, investigates performance, and tests the next change. You choose the models, hardware, and budget; the code and experiment records remain yours to inspect and use.
 
@@ -40,16 +40,14 @@ python -m kai_core --help
 ```
 
 <details>
-<summary>Optional: check your GPU environment with the packaged LayerNorm task</summary>
+<summary>Optional: check your GPU environment with the packaged depthwise convolution task</summary>
 
 ```bash
-python -m kai_core benchmark validate examples/layernorm/benchmark-graph-events.yaml \
-  --split search --output layernorm-preflight.json
+python -m kai_core benchmark validate examples/depthwise_conv/benchmark.yaml \
+  --split search --output depthwise-preflight.json
 ```
 
-This runs task checks and baseline correctness using your GPU, with **no model calls**; if the manifest enables `measurement.calibration`, it also runs the A/A check. Add `--checks-only` to skip timing. It does not test your model endpoint or run the optimization loop.
-
-Use the graph-events manifest above. The example ships a second manifest at a wider measurement boundary; the two are not comparable, and submission-related idle gaps in the wider boundary add noise to its timing. [Which manifest to use →](examples/layernorm/README.md#which-manifest-to-use)
+This compiles the cuDNN baseline, runs task checks and baseline correctness on your GPU, and times the baseline, with **no model calls**; if the manifest enables `measurement.calibration`, it also runs the A/A check. Add `--checks-only` to skip timing. It does not test your model endpoint or run the optimization loop. The task needs PyTorch (for its bundled cuDNN) and `nvcc` for your architecture; see [the example](examples/depthwise_conv/README.md).
 
 </details>
 
@@ -84,6 +82,38 @@ Add `--dry-run` to inspect the plan and frozen task bundle without model calls o
 
 [Full setup, credentials, profiling, dry-run and resume →](docs/QUICKSTART.md)
 
+## Showcase: 4× over cuDNN on depthwise 7×7 convolution
+
+Large-kernel depthwise convolution is the slow stage of ConvNeXt-style backbones and gets little optimization attention: no tensor-core path, and library implementations sit far below the memory roof. We pointed KAI Pichu at [the packaged task](examples/depthwise_conv/README.md), whose baseline calls cuDNN's grouped convolution with cuDNN's own fastest algorithm per shape, and let it run for 13 rounds with no target speedup.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/depthwise-showcase-dark.svg">
+  <img src="docs/assets/depthwise-showcase-light.svg" alt="Bar chart of speedup over cuDNN for the 13 evaluated candidates. Round 1 reaches 1.96×, round 2 3.52×, round 3 4.25× which stays the best; later rounds land between 3.65× and 4.20×; two candidates failed to build and were repaired in the next round." width="100%">
+</picture>
+
+**Setup.** NVIDIA GeForce RTX 5070, CUDA 12.9, PyTorch 2.8 with cuDNN 9.10. Generator and judge: `gpt-5.6-luna` through the OpenAI Responses API at reasoning effort `xhigh`. Budget: 13 rounds, no `target_speedup`; A/A calibration off; NCU profiling on with up to four evidence queries per diagnosis. 72 model calls, 1.4M input and 0.4M output tokens, about 1.7 hours of loop time.
+
+**Result.** The best candidate (round 3) was rerun twice on five held-out cases that search never saw: different value distributions, odd spatial sizes, an unaligned channel count and a 14×14 map. Both acceptance runs passed every per-case regression rule.
+
+| Held-out case | cuDNN | KAI Pichu | Speedup |
+| --- | --- | --- | --- |
+| 8×256×56×56, large-range activations | 0.710 ms | 0.133 ms | 5.3× |
+| 16×96×56×56, smooth feature maps | 0.538 ms | 0.104 ms | 5.2× |
+| 4×192×57×61, odd spatial size | 0.314 ms | 0.067 ms | 4.7× |
+| 4×100×61×59, post-ReLU sparse, unaligned rows | 0.180 ms | 0.045 ms | 4.0× |
+| 2×768×14×14, small map | 0.056 ms | 0.037 ms | 1.5× |
+
+Geometric-mean speedup across the five cases: 3.85× and 3.54× on the two acceptance runs (95% intervals [3.77, 3.92] and [3.42, 3.66]). Outputs matched the FP32 reference rounded to FP16 with zero error on every case.
+
+**How it got there.** The trajectory is the point of the tool, not the final number:
+
+1. *Round 1 (1.96×).* The generator replaced cuDNN's generic IMPLICIT_GEMM path with a custom NCHW kernel that stages each plane's 7×7 halo in a shared-memory FP32 tile through alignment-checked `half2` loads, keeping cuDNN only for tiny shapes.
+2. *Round 2 (3.52×).* The judge read the NCU profile of round 1: 88% SM throughput, 96% active warps, shared-memory read throughput near zero. Its diagnosis was that the 49-tap FMA loop was issue-bound, not memory-bound, and it asked for register blocking. The generator made each thread compute two adjacent outputs from the same shared rows, with an odd tile pitch to avoid bank conflicts.
+3. *Round 3 (4.25×).* Same diagnosis, pushed further: four adjacent outputs per thread, so each filter row needs ten shared-memory reads for four dot products instead of twenty-eight, dispatched only where the wider tile fits.
+4. *Rounds 4 to 13.* Nine variants of that design (half2-packed halos, warp shuffles, eight-output blocking, `cp.async` double buffering, width-specific kernels) all measured between 3.65× and 4.20×; none displaced round 3. Two rounds failed to compile on undefined identifiers and were repaired in the following round from the compiler's own error text.
+
+The naive alternative, one thread per output with 49 global loads, already beats cuDNN by about 1.9× on this GPU; the agent's contribution is the remaining 2.2× between that and the accepted kernel. The 14×14 case, where the wide tiles do not fit, is where headroom remains. Every request, response, candidate, report and profile of this run is a plain file in the run directory, in the layout below.
+
 ## What a run leaves behind
 
 **No accepted candidate does not mean no useful work.** Inspect the attempts, diagnostics, and source changes, not just the final status.
@@ -115,7 +145,7 @@ The SDK controls built-in timing; adapter-defined metrics require their own boun
 | You want to… | Start here |
 | --- | --- |
 | Define a task and run the agent | [Quickstart](docs/QUICKSTART.md) |
-| Explore the packaged tasks | [LayerNorm example](examples/layernorm/README.md), [FP16 attention example](examples/attention/README.md), [depthwise 7×7 convolution against cuDNN](examples/depthwise_conv/README.md) |
+| Explore the packaged tasks | [Depthwise 7×7 convolution against cuDNN](examples/depthwise_conv/README.md), [FP16 attention example](examples/attention/README.md) |
 | Fuse kernels you already have | [Epilogue fusion example](examples/fusion/README.md) (`kind: fusion`) |
 | Understand the agent’s decisions and outputs | [Workflow](docs/WORKFLOW.md) |
 | Understand correctness, timing, and acceptance | [Measurement](docs/MEASUREMENT.md) |
@@ -126,9 +156,9 @@ Bring a new operator, an interesting failure, a better diagnostic strategy, or r
 
 ## Research and attribution
 
-The agent builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)** and **[StitchCUDA](https://icml.cc/virtual/2026/poster/64924)** . Its optimizer source history and retained MIT notices are documented in the repository. Some example tasks comes from **[CUDAHercules](https://arxiv.org/abs/2605.08467)**.
+The agent builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)** and **[StitchCUDA](https://icml.cc/virtual/2026/poster/64924)**. Its optimizer source history and retained MIT notices are documented in the repository. The task design and evaluation methodology draw on **[CUDAHercules](https://arxiv.org/abs/2605.08467)**.
 
-If KAI-Core supports your work, please cite the relevant papers:
+If KAI Pichu supports your work, please cite the relevant papers:
 
 ```bibtex
 @misc{zhang2025cudaforge,
@@ -160,6 +190,6 @@ Framework changes use Apache-2.0; third-party components retain their own licens
 
 ---
 
-<sub>**KAI Core** (open · single operator) · **KAI Standard** (open · end to end) · **KAI Enterprise** (managed)</sub>
+<sub>**KAI Pichu** (open · single operator) · **KAI Pikachu** (open · end to end) · **KAI Raichu** (managed)</sub>
 
 <sub>Built by [Accion Intelligence](https://github.com/accion-intelligence).</sub>

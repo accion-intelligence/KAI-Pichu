@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="724" viewBox="0 0 1280 724" role="img" aria-labelledby="title desc">
-<title id="title">KAI Core Agent — CUDA kernel engineering workflow</title>
+<title id="title">KAI Pichu — CUDA kernel engineering workflow</title>
 <desc id="desc">You define an operator, reference and objective, models, GPU and budget. Following baseline preflight, the agent generates and evaluates CUDA candidates. Failures trigger diagnosis and repair; valid candidates feed performance diagnosis with optional NCU evidence and another revision. After search, the best eligible candidate receives repeated acceptance checks. A shared artifacts panel distinguishes conditionally accepted source from the code, diagnostics and measurements recorded across attempts.</desc>
 <defs>
 <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#89969e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>

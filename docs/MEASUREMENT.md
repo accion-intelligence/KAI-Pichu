@@ -14,9 +14,7 @@ The engineer also defines the cases returned for each split. An acceptance split
 
 The manifest names the objective and its scope, units, direction, boundary and cache policy. SDK timers are `wall` and `cuda_event`; adapters can expose additional metrics with explicit semantics. Compilation, fixture preparation, reset and correctness checks are outside the ordinary timed invocation. Synchronization and custom metric behavior must match the declared boundary.
 
-The LayerNorm example’s `graph_events` option implements its operator metric inside the adapter. It is not a third SDK timer enum. Its operator latency excludes host submission, compilation and graph capture; it must not be presented as end-to-end application latency.
-
-The example therefore ships two manifests. `benchmark-graph-events.yaml` uses that adapter metric; `benchmark.yaml` uses the SDK `cuda_event` timer, an outer GPU-timeline boundary that can include submission-related idle gaps. It is not a CPU wall-clock measurement. The two boundaries answer different questions; do not compare their numbers as if they measured the same work. Use `benchmark-graph-events.yaml` for optimizing this operator. The outer-event manifest is retained for boundary comparison; submission-related idle gaps can prevent A/A calibration from passing. This does not establish that `cuda_event` is unsuitable in general. Calibrate whichever boundary you choose on your own hardware.
+The packaged examples implement their `operator_latency_ms` metric inside the adapter with the `graph_events` option: two external CUDA events recorded inside a CUDA Graph around exactly one operator call. It is not a third SDK timer enum. That latency excludes host submission, compilation and graph capture, and it must not be presented as end-to-end application latency. The SDK's own `cuda_event` timer measures an outer GPU-timeline boundary that can include submission-related idle gaps; the two boundaries answer different questions, so do not compare their numbers as if they measured the same work.
 
 ## Optional calibration, then compare
 
@@ -24,7 +22,7 @@ A/A calibration is off by default. When `measurement.calibration` is enabled, ba
 
 The runner interleaves A/B observations in alternating ABBA/BAAB blocks and crosses fixture slots. This reduces particular order and allocation biases; it does not eliminate all interference. The protocol uses weighted geometric-mean speedup and percentile-bootstrap confidence intervals. The current implementation does not remove outliers.
 
-Output poisoning and a 256 MiB cache flush belong to the packaged LayerNorm adapter, not to every task.
+Output poisoning and a 256 MiB cache flush belong to the packaged example adapters, not to every task.
 
 ## Search and acceptance are different
 

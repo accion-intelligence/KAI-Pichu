@@ -2,7 +2,7 @@
 
 [← README](../README.md)
 
-This guide matches source commit `f7047172a5078ef43de6d915185d86ed21707fb5`. The product is KAI Core Agent; the current Python module remains `kai_core`. Run commands from a source checkout. This document set does not contain the executable source.
+This guide matches source commit `f7047172a5078ef43de6d915185d86ed21707fb5`. The product is KAI Pichu; the current Python module remains `kai_core`. Run commands from a source checkout. This document set does not contain the executable source.
 
 ## 1. Prepare the environment
 
