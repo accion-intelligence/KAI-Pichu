@@ -1,12 +1,14 @@
 # KAI Pichu
 
-### An open-source CUDA kernel agent.
+### An open-source agent harness for CUDA kernel optimization.
 
-[Get started](#get-started) · [How it works](#how-it-works) · [Documentation](#documentation) · [Research](#research-and-attribution)
+[Get started](#get-started) · [How it works](#how-it-works) · [Define a task with your coding agent](#define-a-task-with-your-coding-agent) · [Documentation](#documentation) · [Research](#research-and-attribution)
 
-At Accion Intelligence, we’re building KAI to make GPU engineering accessible from a specification. **KAI Pichu is our open-source CUDA kernel agent:** it generates, debugs, profiles, and optimizes one GPU operator at a time. It is the first of three tiers: **KAI Pichu** (open, single operator), **KAI Pikachu** (open, end to end) and **KAI Raichu** (managed). The Python package and CLI are `kai_core` / `kai-core`.
+At Accion Intelligence, we’re building KAI to make GPU engineering accessible from a specification. **KAI Pichu is the open-source agent harness underneath it:** a Benchmark SDK that turns an operator contract into a task no model can game, an optimization loop that drives any LLM you choose through generate, measure, profile and repair, and a run record you can audit line by line. It optimizes one GPU operator, or fuses one kernel pipeline, at a time. It is the first of three tiers: **KAI Pichu** (open, single operator), **KAI Pikachu** (open, end to end) and **KAI Raichu** (managed). The Python package and CLI are `kai_core` / `kai-core`.
 
-Define what your operator must do, how to check it, and what performance it should beat. The agent generates a candidate, diagnoses failures, repairs the code, investigates performance, and tests the next change. You choose the models, hardware, and budget; the code and experiment records remain yours to inspect and use.
+You define what the operator must do, how to check it, what to beat and what to time. The harness freezes that contract, keeps the inputs and the oracle out of the model's reach, measures every candidate in paired blocks with confidence intervals, and hands the model the evidence it needs: measured values, compiler errors, Nsight Compute counters. You choose the models, hardware and budget; the code and experiment records remain yours.
+
+**Writing the task is the hard part, so the SDK ships with a skill for Claude Code and Codex.** `kai-core skill install`, then tell your agent which operator to wrap: it follows the packaged manual, keeps the test data hidden from the optimizer, and shows you the contract before anything runs.
 
 <picture>
   <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="docs/assets/kai-core-workflow-dark.png">
@@ -17,14 +19,18 @@ Define what your operator must do, how to check it, and what performance it shou
 
 ## How it works
 
-**One task. Two feedback loops. A record of the work.**
+**Three parts: a Benchmark SDK, an optimization loop, and a record of the work.**
 
-- **Generate and repair.** The generator writes the permitted implementation files. Build or correctness failures go to a diagnostic judge, which identifies an issue and proposes a focused repair for the next revision.
-- **Investigate and optimize.** For valid candidates, the judge uses measured performance and, when enabled, Nsight Compute evidence to propose a bottleneck hypothesis and a concrete code change. Feedback includes the scored metric’s measured baseline and candidate values, units, and boundary. It can query captured profile details on demand before deciding.
-- **Keep progress.** The loop retains the best eligible candidate, records hypotheses and results, and works within explicit round, model-call, and time budgets. Interrupted runs can resume under the original configuration.
-- **Recheck the result.** After search completes, the selected candidate is rerun on the acceptance split. Source is marked `accepted` only when every required acceptance run passes.
+- **Benchmark SDK.** A task is a manifest plus an adapter: cases per split, input synthesis, an independent oracle, deliberately wrong outputs the validator must reject, and a declared timing boundary. Search and acceptance splits span the same input ranges; the model sees search results only. The SDK times both implementations in interleaved paired blocks and reports speedups with bootstrap intervals and a per-case regression limit. `kind: fusion` tasks hand the model kernels you already have, read-only, and ask for fewer launches.
+- **Optimization loop.** Any model behind an OpenAI-compatible, Responses or Anthropic endpoint plays generator and judge:
 
-The agent is an **engineering tool**, not a fixed benchmark or a kernel library. Your task specifies the semantics, baseline, cases, precision, and measurement boundary. A task can launch more than one CUDA kernel; the declared operator boundary is what gets evaluated.
+  - *Generate and repair.* The generator writes the permitted implementation files. Build or correctness failures go to a diagnostic judge, which identifies one issue and proposes a focused repair.
+  - *Investigate and optimize.* For valid candidates the judge reads the measured baseline and candidate values and, when enabled, an Nsight Compute profile of the search case where the candidate gained least. It can query the captured profile before proposing one bottleneck hypothesis and one code change.
+  - *Keep progress.* The loop keeps the best eligible candidate, works within round, model-call and time budgets, and resumes after interruptions.
+  - *Recheck.* After search, the best candidate is rerun on the held-out acceptance split and marked `accepted` only if every run passes.
+- **Record of the work.** Every request, response, candidate, report and profile is a plain file in the run directory.
+
+KAI Pichu is an **agent harness for engineering work**, not a fixed benchmark suite or a kernel library. Your task specifies the semantics, baseline, cases, precision and measurement boundary; the harness enforces them against whatever model you plug in.
 
 ## Get started
 
@@ -53,15 +59,7 @@ This compiles the cuDNN baseline, runs task checks and baseline correctness on y
 
 **2. Define your operator**
 
-Start with your own specification or existing implementation. A runnable task is a **manifest + adapter**: the contract for your operator and the code that prepares inputs, loads implementations, and checks results. The fastest route is the packaged skill for Claude Code and Codex:
-
-```bash
-python -m kai_core skill install          # into ./.claude/skills and ./.codex/skills; --scope user for ~/
-```
-
-Then tell your agent: *"Build a KAI task for the operator I describe"*. The skill walks it through the contract, the hidden inputs and oracle, the splits, the agent-visible description and validation, and asks you to approve the contract before optimization.
-
-To author by hand, read the same manual the skill uses, export the schema and scaffold a task:
+A runnable task is a **manifest + adapter**: the contract for your operator and the code that prepares inputs, loads implementations and checks results. Let your coding agent write it with the packaged skill (next section), or author it by hand from the same manual:
 
 ```bash
 python -m kai_core benchmark guide --output task-manual.md
@@ -73,7 +71,7 @@ python -m kai_core benchmark init /absolute/path/to/your-task --template statele
 
 **3. Configure, run, and inspect**
 
-Export the model configuration, set your endpoint and budget, then start the agent against your reviewed task. The optimizer checks the baseline before making its first generation call.
+Export the model configuration, set your endpoint and budget, then start the loop against your reviewed task. The optimizer checks the baseline before making its first generation call.
 
 ```bash
 python -m kai_core config --output optimizer.yaml
@@ -85,6 +83,30 @@ python -m kai_core optimize /absolute/path/to/your-task/benchmark.yaml \
 Add `--dry-run` to inspect the plan and frozen task bundle without model calls or GPU workload.
 
 [Full setup, credentials, profiling, dry-run and resume →](docs/QUICKSTART.md)
+
+## Define a task with your coding agent
+
+The Benchmark SDK is the part of KAI Pichu you spend the most time with, and it is designed to be written by an agent under your review. It ships as a skill in the same format Claude Code and Codex read:
+
+```bash
+python -m kai_core skill install                 # ./.claude/skills and ./.codex/skills
+python -m kai_core skill install --scope user    # ~/.claude/skills and ~/.codex/skills
+```
+
+Then, in your project, tell the agent what you have and what you want:
+
+> Build a KAI task for my 7×7 depthwise convolution. Baseline is cuDNN, FP16 in and out, FP32 reference. Time the kernel alone.
+
+The skill makes the agent settle the contract with you first (semantics, baseline, reference and tolerance, input domain, timed boundary, editable files), write the hidden side (inputs, oracle, adapter) before the model-visible side, define search and acceptance splits over the same ranges, verify every claim in the task description, run the SDK's validation on every split, and show you the contract before `kai-core optimize`. The same rules are in the manual (`kai-core benchmark guide`) for anyone writing a task by hand.
+
+What the SDK enforces for every task, whoever writes it:
+
+| Rule | Why |
+| --- | --- |
+| The adapter, input generation and oracle are never shown to the optimizing model | A candidate cannot specialize to the test data |
+| Every case ships deliberately wrong outputs the validator must reject | A vacuous oracle is caught at preflight |
+| Paired ABBA blocks, bootstrap intervals, a per-case regression limit | Ordinary GPU jitter is neither a speedup nor a regression |
+| Frozen, fingerprinted task bundle | A run cannot be rescued by editing the task under it |
 
 ## Showcase: $1, 2 hours, 4.25× over cuDNN
 
@@ -118,7 +140,7 @@ Geometric-mean speedup across the five cases: 3.85× and 3.54× on the two accep
 3. *Round 3 (4.25×).* Same diagnosis, pushed further: four adjacent outputs per thread, so each filter row needs ten shared-memory reads for four dot products instead of twenty-eight, dispatched only where the wider tile fits.
 4. *Rounds 4 to 13.* Nine variants of that design (half2-packed halos, warp shuffles, eight-output blocking, `cp.async` double buffering, width-specific kernels) all measured between 3.65× and 4.20×; none displaced round 3. Two rounds failed to compile on undefined identifiers and were repaired in the following round from the compiler's own error text.
 
-The naive alternative, one thread per output with 49 global loads, already beats cuDNN by about 1.9× on this GPU; the agent's contribution is the remaining 2.2× between that and the accepted kernel. The 14×14 case, where the wide tiles do not fit, is where headroom remains. Every request, response, candidate, report and profile of this run is a plain file in the run directory, in the layout below.
+The naive alternative, one thread per output with 49 global loads, already beats cuDNN by about 1.9× on this GPU; the loop's contribution is the remaining 2.2× between that and the accepted kernel. The 14×14 case, where the wide tiles do not fit, is where headroom remains. Every request, response, candidate, report and profile of this run is a plain file in the run directory, in the layout below.
 
 ## What a run leaves behind
 
@@ -150,11 +172,12 @@ The SDK controls built-in timing; adapter-defined metrics require their own boun
 
 | You want to… | Start here |
 | --- | --- |
-| Define a task and run the agent | [Quickstart](docs/QUICKSTART.md) |
-| Write a task, by hand or with a coding agent | [Benchmark manual](src/kai_core/benchmark/MANUAL.md) (also `kai-core benchmark guide`), installed as the `kai-benchmark` skill by `kai-core skill install` |
+| Install, define a task and run the loop | [Quickstart](docs/QUICKSTART.md) |
+| Write a task, by hand or with Claude Code / Codex | [Benchmark manual](src/kai_core/benchmark/MANUAL.md) (`kai-core benchmark guide`); the `kai-benchmark` skill from `kai-core skill install` follows it |
+| Understand the Benchmark SDK's design | [Benchmark framework](docs/benchmark-framework.md) |
 | Explore the packaged tasks | [Depthwise 7×7 convolution against cuDNN](examples/depthwise_conv/README.md), [FP16 attention example](examples/attention/README.md) |
 | Fuse kernels you already have | [AWQ INT4 linear layer on AutoAWQ's kernels](examples/awq_linear_fusion/README.md), [epilogue fusion example](examples/fusion/README.md) (`kind: fusion`) |
-| Understand the agent’s decisions and outputs | [Workflow](docs/WORKFLOW.md) |
+| Understand the loop’s decisions and outputs | [Workflow](docs/WORKFLOW.md) |
 | Understand correctness, timing, and acceptance | [Measurement](docs/MEASUREMENT.md) |
 
 ## Contributing
@@ -163,7 +186,7 @@ Bring a new operator, an interesting failure, a better diagnostic strategy, or r
 
 ## Research and attribution
 
-The agent builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)** and **[StitchCUDA](https://icml.cc/virtual/2026/poster/64924)**. Its optimizer source history and retained MIT notices are documented in the repository. The task design and evaluation methodology draw on **[CUDAHercules](https://arxiv.org/abs/2605.08467)**.
+The optimization loop builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)** and **[StitchCUDA](https://icml.cc/virtual/2026/poster/64924)**. Its optimizer source history and retained MIT notices are documented in the repository. The task design and evaluation methodology draw on **[CUDAHercules](https://arxiv.org/abs/2605.08467)**.
 
 If KAI Pichu supports your work, please cite the relevant papers:
 
