@@ -1,0 +1,63 @@
+schema_version: 1
+name: awq_int4_linear_fusion_v1
+kind: fusion
+description: Fuse AutoAWQ's two-stage INT4 linear layer, y[M, N] = x[M, K] · dequant(W)[K, N].
+  Weights are asymmetric 4-bit values packed eight per int32 in the AWQ layout with a
+  per-group (128 input rows) FP16 scale and packed 4-bit zero point. The baseline runs
+  AutoAWQ's dequantize_weights kernel into an FP16 weight matrix in the workspace and then
+  a cuBLAS FP16 GEMM, exactly like AutoAWQ's large-batch path. M is 1 to 8 (decode-time
+  rows); K and N follow Llama 7B and 13B projections. Output FP16 is
+  compared with an FP32 PyTorch reference at atol = rtol = 1e-2.
+fusion:
+  kernels:
+  - name: dequantize_weights
+    files: [kernels/dequantize.cuh, kernels/dequantize_weights.cu]
+    entry: launch_dequantize_weights
+    description: AutoAWQ kernel, one thread per packed int32, writes W[K, N] = (q - zero) * scale in FP16
+  - name: fp16_gemm
+    files: [kernels/cublas_gemm.cu]
+    entry: launch_fp16_gemm
+    description: cuBLAS GEMM, y = x · W in FP16 with FP32 accumulation (AutoAWQ's torch.matmul)
+  intermediates: [W, the dequantized FP16 weight matrix of K*N*2 bytes in the workspace]
+adapter: adapter.py:AwqLinear
+implementation:
+  root: baseline
+  files:
+  - solution.cu
+benchmark_files:
+- bridge.cu
+- inputs.py
+- reference.py
+agent_files:
+- bridge.cu
+- description.md
+objective:
+  metric: operator_latency_ms
+  unit: ms
+  direction: minimize
+  scope: kernel
+  max_case_regression: 0.05
+measurement:
+  timer: cuda_event
+  device: 0
+  warmup: 10
+  blocks: 40
+  iterations: 10
+  confidence: 0.95
+  bootstrap_samples: 5000
+  boundary: GPU elapsed time between two external CUDA event record nodes captured
+    around exactly one complete pipeline invocation in the same CUDA Graph, whether it
+    launches two kernels or one. Graph submission, compilation, input/output/workspace
+    allocation, reset and validation are excluded. The SDK also records its outer
+    latency_ms as a diagnostic; only operator_latency_ms is scored.
+  cache_policy: Before every invocation, poison the output and write a separate 256 MiB
+    buffer to evict the activations, packed weights, scales and zeros from L2. Input and
+    workspace buffers are reused. No profiler or clock locking.
+seed: 0
+options:
+  device: cuda:0
+  nvcc: nvcc
+  cuda_arch: sm_120
+  compile_timeout_seconds: 300
+  execution: graph_events
+  group_size: 128
