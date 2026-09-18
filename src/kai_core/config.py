@@ -14,7 +14,7 @@ class ConfigModel(BaseModel):
 
 
 class ModelConfig(ConfigModel):
-    provider: Literal["chat_completions", "responses", "replay"] = "chat_completions"
+    provider: Literal["chat_completions", "responses", "anthropic", "replay"] = "chat_completions"
     model: str = ""
     base_url: str = ""
     api_key_env: str = Field(default="KAI_CORE_API_KEY",
@@ -27,15 +27,26 @@ class ModelConfig(ConfigModel):
 
     @model_validator(mode="after")
     def validate_endpoint(self) -> ModelConfig:
-        if self.provider != "replay":
-            url = urlparse(self.base_url)
-            if not self.model or url.scheme not in ("http", "https") or not url.hostname:
+        if self.provider == "anthropic":
+            if not self.model or not self.api_key_env:
+                raise ValueError("provider anthropic requires a model and a non-empty api_key_env")
+            if self.base_url:
+                self._check_url()
+        elif self.provider != "replay":
+            if not self.model or not self.base_url:
                 raise ValueError("live providers require an explicit model and http(s) base_url")
-            if url.username or url.password or url.query or url.fragment:
-                raise ValueError("base_url cannot contain credentials, a query or a fragment")
-        if set(self.extra_body) & {"messages", "input", "model", "stream", "max_tokens", "max_output_tokens", "store"}:
-            raise ValueError("extra_body cannot replace model input, token limits, stream or store")
+            self._check_url()
+        reserved = {"messages", "input", "model", "stream", "max_tokens", "max_output_tokens", "store", "system"}
+        if set(self.extra_body) & reserved:
+            raise ValueError("extra_body cannot replace model input, system prompt, token limits, stream or store")
         return self
+
+    def _check_url(self) -> None:
+        url = urlparse(self.base_url)
+        if url.scheme not in ("http", "https") or not url.hostname:
+            raise ValueError("base_url must be an http(s) URL")
+        if url.username or url.password or url.query or url.fragment:
+            raise ValueError("base_url cannot contain credentials, a query or a fragment")
 
 
 class Budget(ConfigModel):

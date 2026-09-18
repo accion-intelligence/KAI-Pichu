@@ -237,10 +237,29 @@ class OptimizationLoop:
                    "final_accepted": self.state["status"] == "accepted", "best_search": best,
                    "acceptance_reports": self.state.get("acceptance_reports", []),
                    "rounds_completed": len(self.state["history"]), "llm_calls": self.state["llm_calls"],
+                   "budget_changes": self.state.get("budget_changes", []),
                    "elapsed_seconds": self.state["elapsed_seconds"], "usage": self.state["usage"],
                    "frozen_fingerprint": self.state["frozen_fingerprint"],
                    "gpu_policy": self.config.resources.gpu_policy}
         write_json(root / "summary.json", summary, replace=True)
+
+    def _adopt_budget_change(self, config_fingerprint: str) -> None:
+        """Allow a resumed run to continue under a different budget.
+
+        Rounds, model calls and wall time are limits on the experiment, not part
+        of its contract: models, profiling and context settings must still match
+        the recorded config.json. The change is recorded in the checkpoint and
+        config.json is replaced so the run directory describes what actually ran.
+        """
+        original = OptimizeConfig.model_validate(json.loads((self.workspace.root / "config.json").read_text()))
+        if original.model_dump(exclude={"budget"}) != self.config.model_dump(exclude={"budget"}):
+            raise ValueError("resume requires the original configuration; only the budget may change")
+        if original.budget != self.config.budget:
+            self.state.setdefault("budget_changes", []).append({
+                "at_round": self.state["next_round"], "from": original.budget.model_dump(),
+                "to": self.config.budget.model_dump()})
+        self.state["config_fingerprint"] = config_fingerprint
+        write_json(self.workspace.root / "config.json", self.config.model_dump(), replace=True)
 
     def run(self, *, resume: bool = False, dry_run: bool = False) -> dict[str, Any]:
         root = self.workspace.root
@@ -251,10 +270,10 @@ class OptimizationLoop:
             self.started = time.monotonic()
             if resume:
                 self.state = json.loads((root / "state.json").read_text())
-                if self.state["config_fingerprint"] != config_fingerprint:
-                    raise ValueError("resume requires the original configuration")
                 if self.state["status"] in ("accepted", "not_accepted", "no_improvement"):
                     raise ValueError("completed runs cannot be resumed; use a new output directory")
+                if self.state["config_fingerprint"] != config_fingerprint:
+                    self._adopt_budget_change(config_fingerprint)
                 self.previous_elapsed = self.state["elapsed_seconds"]
                 self._verify()
             else:

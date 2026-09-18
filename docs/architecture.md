@@ -71,8 +71,11 @@ constraints. A configured larger speedup target is checked during final acceptan
 - The user must provide a correct reset and an independent oracle. Trusted native
   code can still access the host; source boundaries are not a hostile-code sandbox.
 
-The model interface accepts chat-completions-compatible HTTP services and the
-OpenAI Responses API (`provider: responses`, with `store: false`).
+The model interface accepts chat-completions-compatible HTTP services, the
+OpenAI Responses API (`provider: responses`, with `store: false`) and Claude
+through the official Anthropic SDK (`provider: anthropic`, optional dependency
+`kai-core[anthropic]`; adaptive thinking, no sampling parameters, refusals and
+truncated answers reported as model errors, no fallback models).
 `provider: replay` supplies deterministic recorded text for offline control-flow
 tests. Replay output is not model performance evidence. SDK CPU/mocked CUDA tests
 and real GPU/model optimization are separate validation claims.

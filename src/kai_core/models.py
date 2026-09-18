@@ -1,4 +1,9 @@
-"""Explicit model transport; no endpoint or API key is discovered implicitly."""
+"""Explicit model transport; no endpoint or API key is discovered implicitly.
+
+Providers: chat_completions and responses speak the OpenAI-shaped HTTP APIs
+through urllib; anthropic uses the official ``anthropic`` SDK (optional
+dependency); replay serves recorded text for offline tests.
+"""
 from __future__ import annotations
 
 import json
@@ -20,6 +25,8 @@ class ModelClient:
             if index >= len(config.responses):
                 raise ValueError("replay responses exhausted")
             return {"text": config.responses[index], "usage": {}, "provider": "replay"}
+        if config.provider == "anthropic":
+            return self._complete_anthropic(messages, timeout=timeout)
         if config.provider == "responses":
             endpoint = "/responses"
             body = {"model": config.model, "input": messages, "max_output_tokens": config.max_tokens,
@@ -76,3 +83,50 @@ class ModelClient:
         return {"text": content, "usage": value.get("usage", {}),
                 "provider": config.provider, "model": config.model,
                 "finish_reason": choice.get("finish_reason")}
+
+    def _complete_anthropic(self, messages: list[dict[str, str]], *, timeout: float) -> dict[str, Any]:
+        """One Messages API call through the official SDK.
+
+        The system prompt travels in the dedicated ``system`` field. Thinking is
+        adaptive unless ``extra_body`` overrides it, and sampling parameters are
+        never sent because current Claude models reject them. A refusal or a
+        truncated answer is an error: the loop must not treat either as a
+        candidate. Fallback models are not enabled, so every recorded response
+        comes from the configured model.
+        """
+        try:
+            import anthropic
+        except ImportError:
+            raise ValueError("provider anthropic needs the official SDK: pip install 'kai-core[anthropic]'") from None
+        config = self.config
+        key = os.environ.get(config.api_key_env, "")
+        if not key:
+            raise ValueError(f"API key environment variable not set: {config.api_key_env}")
+        client = anthropic.Anthropic(api_key=key, base_url=config.base_url or None,
+                                     timeout=min(timeout, config.timeout_seconds), max_retries=2)
+        system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
+        turns = [m for m in messages if m["role"] != "system"]
+        request: dict[str, Any] = {"model": config.model, "max_tokens": config.max_tokens, "messages": turns,
+                                   "thinking": {"type": "adaptive"}}
+        if system:
+            request["system"] = system
+        try:
+            # Streaming keeps long generations clear of HTTP timeouts.
+            with client.messages.stream(**request, extra_body=config.extra_body or None) as stream:
+                message = stream.get_final_message()
+        except anthropic.APIStatusError as error:
+            raise RuntimeError(f"model HTTP {error.status_code}: {error.message}") from None
+        except anthropic.APIConnectionError as error:
+            raise RuntimeError(f"model connection error: {error}") from None
+        if message.stop_reason == "refusal":
+            details = getattr(message, "stop_details", None)
+            category = getattr(details, "category", None) or "unspecified"
+            raise ValueError(f"model refused the request (category: {category})")
+        if message.stop_reason == "max_tokens":
+            raise ValueError("model response incomplete: max_tokens")
+        content = "".join(block.text for block in message.content if block.type == "text")
+        if not content.strip():
+            raise ValueError("model returned no textual candidate/strategy")
+        return {"text": content, "usage": message.usage.model_dump(), "provider": config.provider,
+                "model": message.model, "response_id": message.id, "finish_reason": message.stop_reason,
+                "content_blocks": [block.model_dump() for block in message.content]}

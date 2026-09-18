@@ -10,6 +10,7 @@ dependencies = ["pydantic>=2,<3", "PyYAML>=6"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+anthropic = ["anthropic>=1"]
 
 [project.scripts]
 kai-core = "kai_core.cli:main"

@@ -79,7 +79,7 @@ Edit the exported file:
 
 | Setting | What to choose |
 | --- | --- |
-| `generator.provider` | `chat_completions` or `responses`, matching your endpoint |
+| `generator.provider` | `chat_completions` or `responses` for OpenAI-shaped endpoints; `anthropic` for Claude via the official SDK (`pip install 'kai-core[anthropic]'`, see `configs/claude_opus5_smoke.yaml`) |
 | `generator.model`, `generator.base_url` | Your model identifier and compatible API base URL |
 | `generator.api_key_env` | The name of the environment variable holding your key |
 | `judge` | Optional separate model configuration; omit to reuse the generator model |
@@ -120,7 +120,7 @@ python -m kai_core optimize /absolute/path/to/your-task/benchmark.yaml \
 
 Or skip dry-run and start a fresh run with the same command **without** `--resume`, using a new output directory.
 
-An interrupted run can resume with the original configuration. Reserved calls and interrupted rounds remain charged to the budget; the loop does not replay unknown calls. Completed runs cannot be resumed. Start a new run to change the task or configuration.
+An interrupted run can resume with the original configuration; only the `budget` section (rounds, model calls, seconds) may differ, and such changes are recorded in `state.json` and `summary.json`. Reserved calls and interrupted rounds remain charged to the budget; the loop does not replay unknown calls. Completed runs cannot be resumed. Start a new run to change the task or configuration.
 
 ## 5. Inspect the work
 

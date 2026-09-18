@@ -813,3 +813,120 @@ def test_fusion_kernels_cannot_also_be_implementation_files(task):
     manifest.write_text(yaml.safe_dump(spec))
     with pytest.raises(ValueError, match="read-only material"):
         Workspace.create(manifest, output)
+
+
+class _FakeAnthropicSDK:
+    """Minimal stand-in for the anthropic package: records the request, returns a canned message."""
+
+    class APIStatusError(Exception):
+        def __init__(self, status_code, message):
+            super().__init__(message)
+            self.status_code, self.message = status_code, message
+
+    class APIConnectionError(Exception):
+        pass
+
+    def __init__(self, message):
+        self.message = message
+        self.requests = []
+        self.client_kwargs = None
+        sdk = self
+
+        class _Stream:
+            def __init__(self, **kwargs):
+                sdk.requests.append(kwargs)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def get_final_message(self):
+                return sdk.message
+
+        class _Messages:
+            stream = staticmethod(_Stream)
+
+        class Anthropic:
+            def __init__(self, **kwargs):
+                sdk.client_kwargs = kwargs
+                self.messages = _Messages()
+
+        self.Anthropic = Anthropic
+
+
+def _claude_message(text, stop_reason="end_turn", category=None):
+    import types
+    block = types.SimpleNamespace(type="text", text=text, model_dump=lambda: {"type": "text", "text": text})
+    thinking = types.SimpleNamespace(type="thinking", model_dump=lambda: {"type": "thinking", "thinking": ""})
+    usage = types.SimpleNamespace(model_dump=lambda: {"input_tokens": 12, "output_tokens": 3})
+    details = types.SimpleNamespace(category=category) if category else None
+    return types.SimpleNamespace(content=[thinking, block], stop_reason=stop_reason, stop_details=details,
+                                 usage=usage, model="claude-opus-5", id="msg_1")
+
+
+def _anthropic_client(monkeypatch, message, **overrides):
+    import sys
+    sdk = _FakeAnthropicSDK(message)
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    monkeypatch.setenv("CLAUDE_KEY", "sk-ant-test")
+    config = ModelConfig(provider="anthropic", model="claude-opus-5", api_key_env="CLAUDE_KEY", max_tokens=4096,
+                         timeout_seconds=90, **overrides)
+    return sdk, ModelClient(config)
+
+
+def test_anthropic_provider_uses_the_sdk_with_system_prompt_and_adaptive_thinking(monkeypatch):
+    sdk, client = _anthropic_client(monkeypatch, _claude_message('{"hypothesis": "h"}'),
+                                    extra_body={"output_config": {"effort": "high"}})
+    result = client.complete([{"role": "system", "content": "rules"}, {"role": "user", "content": "{}"}],
+                             index=0, timeout=30)
+    assert sdk.client_kwargs == {"api_key": "sk-ant-test", "base_url": None, "timeout": 30, "max_retries": 2}
+    request = sdk.requests[0]
+    assert request["system"] == "rules" and request["messages"] == [{"role": "user", "content": "{}"}]
+    assert request["thinking"] == {"type": "adaptive"} and request["extra_body"] == {"output_config": {"effort": "high"}}
+    assert "temperature" not in request and request["max_tokens"] == 4096
+    assert result["text"] == '{"hypothesis": "h"}' and result["finish_reason"] == "end_turn"
+    assert result["usage"] == {"input_tokens": 12, "output_tokens": 3} and result["provider"] == "anthropic"
+    assert [block["type"] for block in result["content_blocks"]] == ["thinking", "text"]
+
+
+def test_anthropic_provider_rejects_refusals_and_truncation(monkeypatch):
+    _, client = _anthropic_client(monkeypatch, _claude_message("", stop_reason="refusal", category="cyber"))
+    with pytest.raises(ValueError, match="refused .*cyber"):
+        client.complete([{"role": "user", "content": "x"}], index=0, timeout=30)
+    _, client = _anthropic_client(monkeypatch, _claude_message("partial", stop_reason="max_tokens"))
+    with pytest.raises(ValueError, match="incomplete: max_tokens"):
+        client.complete([{"role": "user", "content": "x"}], index=0, timeout=30)
+
+
+def test_anthropic_provider_needs_the_sdk_and_a_key(monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, "anthropic", None)  # import fails
+    monkeypatch.setenv("CLAUDE_KEY", "sk-ant-test")
+    client = ModelClient(ModelConfig(provider="anthropic", model="claude-opus-5", api_key_env="CLAUDE_KEY"))
+    with pytest.raises(ValueError, match="kai-core\\[anthropic\\]"):
+        client.complete([{"role": "user", "content": "x"}], index=0, timeout=30)
+    with pytest.raises(ValueError, match="non-empty api_key_env"):
+        ModelConfig(provider="anthropic", model="claude-opus-5", api_key_env="")
+    with pytest.raises(ValueError, match="requires a model"):
+        ModelConfig(provider="anthropic", api_key_env="CLAUDE_KEY")
+    with pytest.raises(ValueError, match="system prompt"):
+        ModelConfig(provider="anthropic", model="claude-opus-5", api_key_env="CLAUDE_KEY", extra_body={"system": "x"})
+    assert ModelConfig(provider="anthropic", model="claude-opus-5", api_key_env="CLAUDE_KEY").base_url == ""
+
+
+def test_resume_accepts_a_changed_budget_but_not_a_changed_contract(task):
+    manifest, config_path, output = task
+    assert main(["optimize", str(manifest), "--config", str(config_path), "--output", str(output), "--dry-run"]) == 0
+    config = yaml.safe_load(config_path.read_text())
+    config["budget"]["rounds"] = 2
+    shorter = config_path.with_name("shorter.yaml"); shorter.write_text(yaml.safe_dump(config))
+    assert main(["optimize", str(manifest), "--config", str(shorter), "--output", str(output), "--resume"]) == 0
+    state = json.loads((output / "state.json").read_text())
+    assert state["budget_changes"][0]["from"]["rounds"] == 3 and state["budget_changes"][0]["to"]["rounds"] == 2
+    assert json.loads((output / "config.json").read_text())["budget"]["rounds"] == 2
+    assert len(state["history"]) == 2 and json.loads((output / "summary.json").read_text())["budget_changes"]
+    config["max_context_chars"] = 99999
+    different = config_path.with_name("different.yaml"); different.write_text(yaml.safe_dump(config))
+    assert main(["optimize", str(manifest), "--config", str(different), "--output", str(output), "--resume"]) == 2
