@@ -47,23 +47,27 @@ python -m kai_core benchmark validate examples/depthwise_conv/benchmark.yaml \
   --split search --output depthwise-preflight.json
 ```
 
-This compiles the cuDNN baseline, runs task checks and baseline correctness on your GPU, and times the baseline, with **no model calls**; if the manifest enables `measurement.calibration`, it also runs the A/A check. Add `--checks-only` to skip timing. It does not test your model endpoint or run the optimization loop. The task needs PyTorch (for its bundled cuDNN) and `nvcc` for your architecture; see [the example](examples/depthwise_conv/README.md).
+This compiles the cuDNN baseline, runs task checks and baseline correctness on your GPU, and times the baseline, with **no model calls**. Add `--checks-only` to skip timing. It does not test your model endpoint or run the optimization loop. The task needs PyTorch (for its bundled cuDNN) and `nvcc` for your architecture; see [the example](examples/depthwise_conv/README.md).
 
 </details>
 
 **2. Define your operator**
 
-Start with your own specification or existing implementation. A runnable task is a **manifest + adapter**: the contract for your operator and the code that prepares inputs, loads implementations, and checks results. Export the authoring guide and schema, then scaffold a task:
+Start with your own specification or existing implementation. A runnable task is a **manifest + adapter**: the contract for your operator and the code that prepares inputs, loads implementations, and checks results. The fastest route is the packaged skill for Claude Code and Codex:
 
 ```bash
-python -m kai_core benchmark guide --output task-authoring.md
+python -m kai_core skill install          # into ./.claude/skills and ./.codex/skills; --scope user for ~/
+```
+
+Then tell your agent: *"Build a KAI task for the operator I describe"*. The skill walks it through the contract, the hidden inputs and oracle, the splits, the agent-visible description and validation, and asks you to approve the contract before optimization.
+
+To author by hand, read the same manual the skill uses, export the schema and scaffold a task:
+
+```bash
+python -m kai_core benchmark guide --output task-manual.md
 python -m kai_core benchmark schema --output task-schema.json
 python -m kai_core benchmark init /absolute/path/to/your-task --template stateless
 ```
-
-Adapt the template yourself, or give your coding agent the exported files and this instruction:
-
-> Build a task for the operator I describe, following this authoring guide and schema. Include the reference implementation, input cases, numerical requirements, editable CUDA files, and timing boundary. Show me the contract for review before optimization. Do not relax correctness requirements to make a candidate pass.
 
 [Task setup and exact commands →](docs/QUICKSTART.md#2-define-the-task)
 
@@ -93,7 +97,7 @@ Large-kernel depthwise convolution is the slow stage of ConvNeXt-style backbones
 
 **$1 of API calls. 2 hours. 4.25× faster than cuDNN.**
 
-**Setup.** NVIDIA GeForce RTX 5070, CUDA 12.9, PyTorch 2.8 with cuDNN 9.10. Generator and judge: `gpt-5.6-luna` through the OpenAI Responses API at reasoning effort `xhigh`. Budget: 13 rounds, no `target_speedup`; A/A calibration off; NCU profiling on with up to four evidence queries per diagnosis.
+**Setup.** NVIDIA GeForce RTX 5070, CUDA 12.9, PyTorch 2.8 with cuDNN 9.10. Generator and judge: `gpt-5.6-luna` through the OpenAI Responses API at reasoning effort `xhigh`. Budget: 13 rounds, no `target_speedup`; NCU profiling on with up to four evidence queries per diagnosis.
 
 **Result.** The best candidate (round 3) was rerun twice on five held-out cases that search never saw: different value distributions, odd spatial sizes, an unaligned channel count and a 14×14 map. Both acceptance runs passed every per-case regression rule.
 
@@ -138,15 +142,16 @@ A successful command exit alone does not mean a speedup was accepted. `accepted`
 
 ## Measurements you can inspect
 
-The benchmark SDK checks correctness against your reference, probes the validator with deliberately invalid observations, optionally calibrates the baseline against itself (`measurement.calibration`), and compares candidates using paired measurements with confidence intervals. Final acceptance repeats evaluation on the acceptance split; whether its cases differ from search is determined by your adapter.
+The benchmark SDK checks correctness against your reference, probes the validator with deliberately invalid observations, and compares candidates using paired measurements with confidence intervals. Final acceptance repeats evaluation on the acceptance split; whether its cases differ from search is determined by your adapter.
 
-The SDK controls built-in timing; adapter-defined metrics require their own boundary review. When A/A calibration is enabled, a failure stops the run rather than triggering code repair. File allowlists and integrity checks help preserve the task, but **this is not a security sandbox**. [Measurement rules and execution risks →](docs/MEASUREMENT.md)
+The SDK controls built-in timing; adapter-defined metrics require their own boundary review. File allowlists and integrity checks help preserve the task, but **this is not a security sandbox**. [Measurement rules and execution risks →](docs/MEASUREMENT.md)
 
 ## Documentation
 
 | You want to… | Start here |
 | --- | --- |
 | Define a task and run the agent | [Quickstart](docs/QUICKSTART.md) |
+| Write a task, by hand or with a coding agent | [Benchmark manual](src/kai_core/benchmark/MANUAL.md) (also `kai-core benchmark guide`), installed as the `kai-benchmark` skill by `kai-core skill install` |
 | Explore the packaged tasks | [Depthwise 7×7 convolution against cuDNN](examples/depthwise_conv/README.md), [FP16 attention example](examples/attention/README.md) |
 | Fuse kernels you already have | [AWQ INT4 linear layer on AutoAWQ's kernels](examples/awq_linear_fusion/README.md), [epilogue fusion example](examples/fusion/README.md) (`kind: fusion`) |
 | Understand the agent’s decisions and outputs | [Workflow](docs/WORKFLOW.md) |

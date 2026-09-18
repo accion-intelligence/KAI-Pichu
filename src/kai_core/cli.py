@@ -22,6 +22,15 @@ def main(argv: list[str] | None = None) -> int:
     optimize.add_argument("--dry-run", action="store_true", help="Freeze source and inspect prompts without GPU or model calls")
     optimize.add_argument("--resume", action="store_true", help="Resume at the next reserved round with the same config")
     commands.add_parser("benchmark", help="Benchmark SDK commands; use benchmark --help")
+    skill = commands.add_parser("skill", help="Install the packaged task-authoring skill for a coding agent")
+    skill_commands = skill.add_subparsers(dest="skill_command", required=True)
+    install = skill_commands.add_parser("install", help="Copy the kai-benchmark skill into an agent's skills directory")
+    install.add_argument("--agent", choices=("claude", "codex", "all"), default="all")
+    install.add_argument("--scope", choices=("project", "user"), default="project",
+                         help="project: ./.claude/skills or ./.codex/skills; user: the same under your home directory")
+    install.add_argument("--directory", type=Path, help="Project root for --scope project (default: current directory)")
+    install.add_argument("--force", action="store_true", help="Replace an existing installation")
+    skill_commands.add_parser("path", help="Print the packaged skill directory")
     config_command = commands.add_parser("config", help="Export an optimizer config template or JSON Schema")
     config_command.add_argument("--output", required=True, type=Path)
     config_command.add_argument("--schema", action="store_true")
@@ -63,6 +72,17 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0 if result["status"] == "available" else 1
+        if args.command == "skill":
+            from .skills import AGENT_SKILL_DIRS, install_skill, skill_source
+            if args.skill_command == "path":
+                print(skill_source())
+                return 0
+            agents = sorted(AGENT_SKILL_DIRS) if args.agent == "all" else [args.agent]
+            for agent in agents:
+                destination = install_skill(agent, scope=args.scope, root=args.directory, force=args.force)
+                print(f"Installed {agent} skill: {destination}")
+            print("Ask your agent to build a KAI task for your operator; the skill triggers on that request.")
+            return 0
         if args.command == "config":
             import yaml
             from .io import write_json

@@ -6,9 +6,9 @@ The agent separates **writing a candidate**, **deciding what to change next**, a
 
 ## The task comes first
 
-The engineer defines the operator contract and supplies a runnable baseline, inputs, validator, objective, permitted source files, and measurement rules. Task authoring can be assisted by a coding agent using the packaged guide, schema, and templates. The optimizer itself consumes the resulting manifest and adapter.
+The engineer defines the operator contract and supplies a runnable baseline, inputs, validator, objective, permitted source files, and measurement rules. Task authoring can be done by hand from the packaged manual, schema and templates, or by a coding agent through the packaged `kai-benchmark` skill (`kai-core skill install`). The optimizer itself consumes the resulting manifest and adapter.
 
-A run freezes the task and baseline into its own workspace. Before generating CUDA, it executes the baseline checks on the search split, plus A/A calibration if the manifest enables it. A failure here is a task or measurement problem, not evidence that generated code needs repair.
+A run freezes the task and baseline into its own workspace. Before generating CUDA, it executes the baseline checks on the search split and times the baseline. A failure here is a task or measurement problem, not evidence that generated code needs repair.
 
 ## The first candidate
 
@@ -18,7 +18,7 @@ The generator receives the task description, current implementation source, hard
 
 If the current candidate cannot complete evaluation—for example, because it fails to build or fails correctness—the judge receives the current source and actual error feedback. It identifies one critical issue and a minimal fix hint. The generator uses this strategy to create the next candidate.
 
-This path does not treat a broken candidate as a performance optimization target. Conversely, when calibration is enabled, A/A instability stops the run rather than triggering a code-repair loop.
+This path does not treat a broken candidate as a performance optimization target.
 
 ## Feedback loop 2: investigate and optimize
 
@@ -26,7 +26,7 @@ For valid candidates, the loop starts from the best eligible candidate when one 
 
 After a completed A/B evaluation, feedback includes the scored metric’s mean, median, minimum, maximum, and sample count for each case and arm, together with its unit, direction, scope, and boundary. Other recorded metrics are identified as unscored. The generator receives this feedback alongside the judge’s strategy. These descriptive statistics do not replace the paired-block speedup or its confidence interval; reports without A/B measurements do not include this summary.
 
-With profiling enabled, NCU captures the selected implementation and case. The judge starts with a compact evidence overview. It can ask a focused question and query captured metrics, rules, or source-level details, subject to available reader capabilities and query budgets. These queries inspect the existing report; they do not launch new captures to obtain missing counters.
+With profiling enabled, NCU captures the selected implementation on one search case: the case where that implementation gained least over the baseline, since a candidate may dispatch different code by shape, or the case pinned by `profile.case_id`. The judge starts with a compact evidence overview. It can ask a focused question and query captured metrics, rules, or source-level details, subject to available reader capabilities and query budgets. These queries inspect the existing report; they do not launch new captures to obtain missing counters.
 
 The judge produces one bottleneck hypothesis, optimization method, and modification plan. The generator applies the plan, and the benchmark evaluates the new candidate. Missing profiling is reported as missing evidence, not invented hardware data. Profiling is optional; ordinary measured feedback still supports the optimization loop.
 
@@ -53,5 +53,5 @@ The diagram groups behavior for readability; it is not a deployment diagram or a
 | Generation, branching, best candidate, budgets, resume, acceptance | [OptimizationLoop](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/optimizer/engine.py) |
 | Repair diagnosis, performance strategy, on-demand profile questions | [Prompts and strategy contract](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/optimizer/prompts.py) |
 | Evaluation processes, feedback, capture and report queries | [Evaluator](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/evaluator.py) |
-| Input preparation, validation, paired measurement, A/A | [Benchmark runner](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/runner.py) |
+| Input preparation, validation, baseline timing, paired measurement | [Benchmark runner](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/runner.py) |
 | Model, budget, resource and profiling configuration | [Configuration](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/config.py) |

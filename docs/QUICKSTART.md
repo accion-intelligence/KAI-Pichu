@@ -25,12 +25,18 @@ A task consists of a **manifest** (semantics, objective, files, measurement sett
 
 Export the machine-readable schema and authoring instructions:
 
+With a coding agent (Claude Code or Codex), install the packaged skill and describe your operator:
+
 ```bash
-python -m kai_core benchmark guide --output task-authoring.md
-python -m kai_core benchmark schema --output task-schema.json
+python -m kai_core skill install            # ./.claude/skills and ./.codex/skills; add --scope user for your home directory
 ```
 
-Use these with your coding agent and your operator description. You decide the input domain, output semantics, baseline, tolerances, timed boundary, and editable files. Review the generated contract before optimization.
+The skill follows the benchmark manual shipped with the SDK. You decide the input domain, output semantics, baseline, tolerances, timed boundary, and editable files; the agent asks when it cannot establish them and shows you the contract for review before optimization. To read the manual yourself:
+
+```bash
+python -m kai_core benchmark guide --output task-manual.md
+python -m kai_core benchmark schema --output task-schema.json
+```
 
 To scaffold the adapter yourself, choose a suitable template and a new directory:
 
@@ -51,7 +57,7 @@ Important API contracts:
 - `invalid_observations(case, fixture, valid)` supplies invalid observations the validator must reject.
 - `reset(...)` and `synchronize(...)` define repeatable execution and completion where required.
 
-Use the generated guide and [actual API](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/api.py) for full signatures. Measurement fields live under `measurement`; the SDK timer options are `wall` and `cuda_event`. Example-specific metric implementations are not additional SDK timer options.
+Use the manual and [actual API](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/api.py) for full signatures. Measurement fields live under `measurement`; the SDK timer options are `wall` and `cuda_event`. Example-specific metric implementations are not additional SDK timer options.
 
 Check conformance before making model calls:
 
@@ -60,7 +66,7 @@ python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml
   --checks-only --output task-checks.json
 ```
 
-This executes the task’s checks, which may require a GPU, without timing. For a complete baseline preflight on the search cases (including A/A calibration if the manifest enables it):
+This executes the task’s checks, which may require a GPU, without timing. For a complete baseline preflight on the search cases, which also times the baseline:
 
 ```bash
 python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml \
@@ -85,6 +91,7 @@ Edit the exported file:
 | `judge` | Optional separate model configuration; omit to reuse the generator model |
 | `budget` | Rounds, model calls, total time, per-evaluation timeout, acceptance repeats |
 | `profile.enabled` | Set `true` to collect NCU evidence when your environment supports it |
+| `profile.case_id` | Pin the search case NCU captures; by default it follows the case with the lowest measured speedup |
 
 The exported default key-variable name is `KAI_CORE_API_KEY`. Set it securely in your environment, or change `api_key_env` to an existing key-variable name. For a local endpoint that needs no authentication, set `api_key_env: ""`. Do not place secrets in the task or commit them to source control.
 
