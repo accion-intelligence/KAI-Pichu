@@ -82,7 +82,7 @@ Add `--dry-run` to inspect the plan and frozen task bundle without model calls o
 
 [Full setup, credentials, profiling, dry-run and resume →](docs/QUICKSTART.md)
 
-## Showcase: 4× over cuDNN on depthwise 7×7 convolution
+## Showcase: $1, 2 hours, 4.25× over cuDNN
 
 Large-kernel depthwise convolution is the slow stage of ConvNeXt-style backbones and gets little optimization attention: no tensor-core path, and library implementations sit far below the memory roof. We pointed KAI Pichu at [the packaged task](examples/depthwise_conv/README.md), whose baseline calls cuDNN's grouped convolution with cuDNN's own fastest algorithm per shape, and let it run for 13 rounds with no target speedup.
 
@@ -91,7 +91,9 @@ Large-kernel depthwise convolution is the slow stage of ConvNeXt-style backbones
   <img src="docs/assets/depthwise-showcase-light.svg" alt="Bar chart of speedup over cuDNN for the 13 evaluated candidates. Round 1 reaches 1.96×, round 2 3.52×, round 3 4.25× which stays the best; later rounds land between 3.65× and 4.20×; two candidates failed to build and were repaired in the next round." width="100%">
 </picture>
 
-**Setup.** NVIDIA GeForce RTX 5070, CUDA 12.9, PyTorch 2.8 with cuDNN 9.10. Generator and judge: `gpt-5.6-luna` through the OpenAI Responses API at reasoning effort `xhigh`. Budget: 13 rounds, no `target_speedup`; A/A calibration off; NCU profiling on with up to four evidence queries per diagnosis. 72 model calls, 1.4M input and 0.4M output tokens, about 1.7 hours of loop time.
+**$1 of API calls. 2 hours. 4.25× faster than cuDNN.**
+
+**Setup.** NVIDIA GeForce RTX 5070, CUDA 12.9, PyTorch 2.8 with cuDNN 9.10. Generator and judge: `gpt-5.6-luna` through the OpenAI Responses API at reasoning effort `xhigh`. Budget: 13 rounds, no `target_speedup`; A/A calibration off; NCU profiling on with up to four evidence queries per diagnosis.
 
 **Result.** The best candidate (round 3) was rerun twice on five held-out cases that search never saw: different value distributions, odd spatial sizes, an unaligned channel count and a 14×14 map. Both acceptance runs passed every per-case regression rule.
 
@@ -146,7 +148,7 @@ The SDK controls built-in timing; adapter-defined metrics require their own boun
 | --- | --- |
 | Define a task and run the agent | [Quickstart](docs/QUICKSTART.md) |
 | Explore the packaged tasks | [Depthwise 7×7 convolution against cuDNN](examples/depthwise_conv/README.md), [FP16 attention example](examples/attention/README.md) |
-| Fuse kernels you already have | [Epilogue fusion example](examples/fusion/README.md) (`kind: fusion`) |
+| Fuse kernels you already have | [AWQ INT4 linear layer on AutoAWQ's kernels](examples/awq_linear_fusion/README.md), [epilogue fusion example](examples/fusion/README.md) (`kind: fusion`) |
 | Understand the agent’s decisions and outputs | [Workflow](docs/WORKFLOW.md) |
 | Understand correctness, timing, and acceptance | [Measurement](docs/MEASUREMENT.md) |
 
