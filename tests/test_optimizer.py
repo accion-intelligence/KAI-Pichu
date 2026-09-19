@@ -1250,3 +1250,82 @@ def test_unknown_base_round_falls_back_to_the_anchor_with_a_note(task, monkeypat
     generator = [json.loads(r["messages"][-1]["content"]) for r in requests if r["role"] == "generator"]
     assert generator[1]["base_round"] == 1
     assert "base_round 7 names no saved candidate" in generator[1]["strategy_note"]
+
+
+def test_splice_joins_continuations_and_drops_repeated_or_restarted_text():
+    from kai_core.optimizer.continuation import splice
+    assert splice('{"a": "hel', 'lo", "b": 1}') == '{"a": "hello", "b": 1}'
+    # The continuation repeated the tail of the cut-off text.
+    partial = '{"hypothesis": "h", "files": {"solution.py": "FACTOR = 1\\nCOST = 5.0\\n'
+    assert splice(partial, 'COST = 5.0\\nMEMORY = 100\\n"}}') == partial + 'MEMORY = 100\\n"}}'
+    # The model started over and wrote the whole object; keep its version.
+    whole = '{"hypothesis": "h", "files": {"solution.py": "x"}}'
+    assert splice('{"hypothesis": "h", "fi', whole) == whole
+    # A fence around the continuation is removed.
+    assert splice('{"a": 1', '```json\n, "b": 2}\n```') == '{"a": 1, "b": 2}'
+    assert splice("", "whole") == "whole"
+
+
+def _truncating_client(pieces):
+    """A fake model client that answers the first call with a cut-off reply and then the rest."""
+    from kai_core.models import ModelReplyError
+    calls = []
+
+    def complete(request, *, index, timeout):
+        calls.append(request)
+        piece = pieces[len(calls) - 1]
+        if piece.get("truncated"):
+            raise ModelReplyError("model response incomplete: length", partial_text=piece["text"])
+        return {"text": piece["text"], "usage": {}, "provider": "fake"}
+
+    return complete, calls
+
+
+def test_a_truncated_generator_reply_is_continued_and_spliced(task, monkeypatch):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["budget"]["rounds"] = 1
+    loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
+    whole = reply(5)
+    cut = len(whole) // 2
+    complete, calls = _truncating_client([{"text": whole[:cut], "truncated": True}, {"text": whole[cut:]}])
+    monkeypatch.setattr(loop.clients["generator"], "complete", complete)
+    summary = loop.run()
+    assert summary["final_accepted"] and summary["llm_calls"] == 2
+    assert calls[1][-2]["role"] == "assistant" and calls[1][-2]["content"] == whole[:cut]
+    assert "cut off by the output limit" in calls[1][-1]["content"]
+    requests = [json.loads(p.read_text()) for p in sorted((output / "llm").glob("*.request.json"))]
+    assert [r["continuation"] for r in requests] == [False, True]
+    assert json.loads((output / "llm" / "call-0000.error.json").read_text())["truncated"] is True
+    assert (output / "best_search" / "solution.py").read_text() == "FACTOR = 1\nCOST = 5\n"
+
+
+def test_continuation_gives_up_after_the_configured_attempts_and_the_round_repairs(task, monkeypatch):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["generator"]["max_continuations"] = 1
+    values["budget"]["rounds"] = 1
+    loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
+    complete, calls = _truncating_client([{"text": '{"hypothesis": "h", "fil', "truncated": True},
+                                          {"text": 'es": {"solution.py": "FACTOR = 1', "truncated": True}])
+    monkeypatch.setattr(loop.clients["generator"], "complete", complete)
+    summary = loop.run()
+    assert not summary["final_accepted"] and len(calls) == 2
+    state = json.loads((output / "state.json").read_text())
+    assert state["history"][0]["metrics"]["status"] == "error"
+    assert state["history"][0]["metrics"]["error_type"] == "ModelReplyError"
+    assert "still incomplete after 1 continuation" in state["history"][0]["metrics"]["message"]
+
+
+def test_continuation_can_be_disabled(task, monkeypatch):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["generator"]["max_continuations"] = 0
+    values["budget"]["rounds"] = 1
+    loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
+    complete, calls = _truncating_client([{"text": '{"hypothesis": "h", "fil', "truncated": True}])
+    monkeypatch.setattr(loop.clients["generator"], "complete", complete)
+    loop.run()
+    assert len(calls) == 1
+    state = json.loads((output / "state.json").read_text())
+    assert state["history"][0]["metrics"]["error_type"] == "ModelReplyError"

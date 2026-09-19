@@ -21,7 +21,11 @@ class ModelConfig(ConfigModel):
         description="Environment variable holding the bearer token; empty string means the endpoint needs no key")
     # The generator returns complete replacement text for every file it touches,
     # and for a reasoning provider this budget is shared with thinking tokens.
-    max_tokens: int = Field(default=16384, ge=1)
+    # 256k leaves room for both; providers cap it at their own limit.
+    max_tokens: int = Field(default=262144, ge=1)
+    max_continuations: int = Field(default=2, ge=0, le=5, description=(
+        "When a reply is cut off by max_tokens, ask the model to continue it up to this many times "
+        "and splice the pieces; each continuation is a model call. 0 disables continuation"))
     temperature: float | None = Field(default=0.2, ge=0)
     timeout_seconds: float = Field(default=120, gt=0)
     extra_body: dict[str, Any] = Field(default_factory=dict)

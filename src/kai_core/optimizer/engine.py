@@ -22,7 +22,8 @@ from ..profiling import ProfileQuery
 from ..workspace import Workspace
 from .history import case_lost_most, history_tables, weakest_case
 from .individual import KernelIndividual
-from .prompts import GENERATOR, OPTIMIZATION_JUDGE, REPAIR_JUDGE, messages, strategy
+from .continuation import splice
+from .prompts import GENERATOR, OPTIMIZATION_JUDGE, REPAIR_JUDGE, continuation_messages, messages, strategy
 
 
 class StopRun(RuntimeError):
@@ -69,6 +70,49 @@ class OptimizationLoop:
         self.workspace.verify(self.state["frozen_fingerprint"])
 
     def _model(self, role: str, system: str, context: dict[str, Any]) -> dict[str, Any]:
+        """One decision from a model: a complete reply, continued if the output limit cut it off."""
+        request = messages(system, context)
+        try:
+            text = self._call(role, request)["text"]
+        except ModelReplyError as error:
+            if not error.truncated:
+                raise
+            text = self._continue(role, request, error)
+        return parse_object(text)
+
+    def _continue(self, role: str, request: list[dict[str, str]], cut_off: ModelReplyError) -> str:
+        """Ask the model to finish a cut-off reply and splice the pieces.
+
+        A long kernel is the normal case for a successful optimization, and a
+        reply cut off by max_tokens still contains most of it. Each continuation
+        is a charged model call within the same budget; when the pieces do not
+        form one JSON object, the round falls back to the ordinary repair path.
+        """
+        attempts = self._model_config(role).max_continuations
+        if attempts == 0:
+            raise cut_off
+        text = cut_off.partial_text
+        for _ in range(attempts):
+            try:
+                piece = self._call(role, continuation_messages(request, text), continuation=True)["text"]
+            except ModelReplyError as error:
+                if not error.truncated:
+                    raise
+                text = splice(text, error.partial_text)
+                continue
+            text = splice(text, piece)
+            try:
+                parse_object(text)
+            except (ValueError, json.JSONDecodeError):
+                continue  # ask once more; the model may have stopped mid-object again
+            return text
+        raise ModelReplyError(f"{cut_off}; still incomplete after {attempts} continuation(s)")
+
+    def _model_config(self, role: str) -> Any:
+        return (self.config.judge or self.config.generator) if role == "judge" else self.config.generator
+
+    def _call(self, role: str, request: list[dict[str, str]], *, continuation: bool = False) -> dict[str, Any]:
+        """Send one request under the model-call budget and record it under llm/."""
         remaining = self._remaining()
         if self.state["llm_calls"] >= self.config.budget.llm_calls:
             raise StopRun("budget_exhausted", "model-call budget exhausted")
@@ -77,16 +121,16 @@ class OptimizationLoop:
         self.state["llm_calls"] += 1
         self.state["role_calls"][role] += 1
         self._save()  # Reserve before sending: an interrupted request is not free.
-        request = messages(system, context)
         path = self.workspace.root / "llm" / f"call-{count:04d}"
-        write_json(path.with_suffix(".request.json"), {"role": role, "messages": request})
+        write_json(path.with_suffix(".request.json"), {"role": role, "continuation": continuation, "messages": request})
         try:
             response = self.clients[role].complete(request, index=role_index, timeout=remaining)
         except ModelReplyError as error:
             # A call was made and answered; the answer is unusable. The caller
             # repairs this within the round budget, as it already does for a
             # malformed candidate. The call stays charged either way.
-            write_json(path.with_suffix(".error.json"), {"error_type": type(error).__name__, "message": str(error)})
+            write_json(path.with_suffix(".error.json"), {"error_type": type(error).__name__, "message": str(error),
+                                                         "truncated": error.truncated})
             raise
         except Exception as error:
             write_json(path.with_suffix(".error.json"), {"error_type": type(error).__name__, "message": str(error)})
@@ -94,7 +138,7 @@ class OptimizationLoop:
         write_json(path.with_suffix(".response.json"), response)
         self.state["usage"].append(response.get("usage", {}))
         self._save()
-        return parse_object(response["text"])
+        return response
 
     def _evaluate(self, label: str, candidate: Path | None, split: str) -> dict[str, Any]:
         self._verify()

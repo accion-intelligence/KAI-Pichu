@@ -90,6 +90,7 @@ Edit the exported file:
 | `generator.api_key_env` | The name of the environment variable holding your key |
 | `judge` | Optional separate model configuration; omit to reuse the generator model |
 | `budget` | Rounds, model calls, total time, per-evaluation timeout, acceptance repeats |
+| `generator.max_continuations` | When a reply is cut off by `max_tokens`, the loop asks the model to continue it up to this many times (default 2) and splices the pieces; each continuation is a model call |
 | `profile.enabled` | Set `true` to collect NCU evidence when your environment supports it |
 | `profile.case_id` | Pin the search case NCU captures; by default it follows the case with the lowest measured speedup |
 

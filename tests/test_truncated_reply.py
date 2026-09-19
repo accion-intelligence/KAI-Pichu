@@ -128,13 +128,30 @@ def truncating_task(tmp_path: Path):
     server.shutdown(); server.server_close(); thread.join()
 
 
-def test_a_truncated_generation_costs_one_round_not_the_run(truncating_task):
+def test_a_truncated_generation_is_continued_within_its_round(truncating_task):
     manifest, config, output, sent = truncating_task
     assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output)]) == 0
     state = json.loads((output / "state.json").read_text())
-    # Before this change the first truncated reply ended the run as model_error.
+    # Before ModelReplyError the first truncated reply ended the run as model_error;
+    # with continuation the loop asks the model to finish it and the seed round completes.
     assert state["status"] not in ("model_error", "error")
     assert len(state["history"]) == 3 and len(sent) > 1
+    first = state["history"][0]["metrics"]
+    assert first["status"] == "completed"
+    requests = [json.loads(p.read_text()) for p in sorted((output / "llm").glob("*.request.json"))]
+    assert [r["continuation"] for r in requests[:2]] == [False, True]
+    assert requests[1]["messages"][-2] == {"role": "assistant", "content": reply(5)[:40]}
+    assert state["best"] is not None
+
+
+def test_without_continuation_a_truncated_generation_costs_one_round_not_the_run(truncating_task):
+    manifest, config, output, sent = truncating_task
+    values = yaml.safe_load(config.read_text())
+    values["generator"]["max_continuations"] = 0
+    config.write_text(yaml.safe_dump(values))
+    assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output)]) == 0
+    state = json.loads((output / "state.json").read_text())
+    assert state["status"] not in ("model_error", "error")
     first = state["history"][0]["metrics"]
     assert first["status"] == "error" and first["error_type"] == "ModelReplyError"
     # The next round is told what actually went wrong, so it can answer shorter.
@@ -147,7 +164,7 @@ def test_the_failed_call_is_still_charged_and_recorded(truncating_task):
     main(["optimize", str(manifest), "--config", str(config), "--output", str(output)])
     # Reserve-before-send is unchanged: an unusable answer is not a free call.
     record = json.loads((output / "llm/call-0000.error.json").read_text())
-    assert record["error_type"] == "ModelReplyError" and "length" in record["message"]
+    assert record["error_type"] == "ModelReplyError" and "length" in record["message"] and record["truncated"] is True
     assert json.loads((output / "state.json").read_text())["llm_calls"] >= 3
 
 
@@ -174,4 +191,60 @@ def test_the_anthropic_provider_keeps_configuration_errors_fatal():
 def test_the_shipped_default_token_budget_fits_a_whole_file_rewrite():
     # The generator must return complete replacement text, and for a reasoning
     # provider this budget is shared with thinking tokens.
-    assert ModelConfig(model="m", api_key_env="", base_url="http://x/v1").max_tokens >= 16384
+    assert ModelConfig(model="m", api_key_env="", base_url="http://x/v1").max_tokens == 262144
+
+
+def test_a_reply_cut_off_by_the_output_limit_carries_its_partial_text():
+    def handler(request):
+        request.send_response(200)
+        request.end_headers()
+        request.wfile.write(json.dumps(
+            {"choices": [{"message": {"content": '{"hypothesis": "h", "files": {"solution.py": "FAC'}, "finish_reason": "length"}]}).encode())
+
+    server, thread = serve(handler)
+    try:
+        client = ModelClient(ModelConfig(model="m", base_url=f"http://127.0.0.1:{server.server_port}", api_key_env=""))
+        with pytest.raises(ModelReplyError) as caught:
+            client.complete([{"role": "user", "content": "go"}], index=0, timeout=5)
+        assert caught.value.truncated and caught.value.partial_text.startswith('{"hypothesis"')
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def test_a_content_filter_reply_is_not_treated_as_truncated():
+    def handler(request):
+        request.send_response(200)
+        request.end_headers()
+        request.wfile.write(json.dumps(
+            {"choices": [{"message": {"content": "partial"}, "finish_reason": "content_filter"}]}).encode())
+
+    server, thread = serve(handler)
+    try:
+        client = ModelClient(ModelConfig(model="m", base_url=f"http://127.0.0.1:{server.server_port}", api_key_env=""))
+        with pytest.raises(ModelReplyError) as caught:
+            client.complete([{"role": "user", "content": "go"}], index=0, timeout=5)
+        assert not caught.value.truncated
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def test_responses_api_truncation_carries_the_text_written_so_far():
+    def handler(request):
+        request.send_response(200)
+        request.end_headers()
+        request.wfile.write(json.dumps({
+            "status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
+            "output": [{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": '{"hypothesis": "h", '}]}],
+        }).encode())
+
+    server, thread = serve(handler)
+    try:
+        client = ModelClient(ModelConfig(provider="responses", model="m", base_url=f"http://127.0.0.1:{server.server_port}", api_key_env=""))
+        with pytest.raises(ModelReplyError) as caught:
+            client.complete([{"role": "user", "content": "go"}], index=0, timeout=5)
+        assert caught.value.partial_text == '{"hypothesis": "h", '
+    finally:
+        server.shutdown()
+        thread.join()

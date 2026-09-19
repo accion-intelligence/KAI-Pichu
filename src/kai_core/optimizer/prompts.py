@@ -93,6 +93,20 @@ When queries are unavailable/exhausted, or evidence is sufficient, return ONLY:
 with base_round optional."""
 
 
+CONTINUATION = """Your previous reply was cut off by the output limit. It ends with:
+{tail}
+Continue from exactly that point. Output only the remaining text of the same
+JSON object: no repetition of text already written, no commentary, no code
+fence. The spliced result must be one valid JSON object."""
+
+
+def continuation_messages(request: list[dict[str, str]], partial_text: str, *, tail_chars: int = 240) -> list[dict[str, str]]:
+    """The follow-up request that asks the model to finish a cut-off reply."""
+    tail = partial_text[-tail_chars:]
+    return [*request, {"role": "assistant", "content": partial_text},
+            {"role": "user", "content": CONTINUATION.format(tail=tail)}]
+
+
 def messages(system: str, context: dict[str, Any]) -> list[dict[str, str]]:
     return [{"role": "system", "content": system},
             {"role": "user", "content": json.dumps(context, indent=2, ensure_ascii=False)}]

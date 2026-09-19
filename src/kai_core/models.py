@@ -42,7 +42,18 @@ class ModelReplyError(ValueError):
     the generator's existing repair case, not a transport fault, so it must reach
     the caller instead of ending the run. A ValueError subclass so existing
     handlers keep working.
+
+    A reply cut off by the output limit carries the text produced so far in
+    ``partial_text``; the caller may ask the model to continue it.
     """
+
+    def __init__(self, message: str, *, partial_text: str | None = None):
+        super().__init__(message)
+        self.partial_text = partial_text
+
+    @property
+    def truncated(self) -> bool:
+        return self.partial_text is not None
 
 
 class ModelClient:
@@ -104,10 +115,15 @@ class ModelClient:
                 raise RuntimeError(f"{message} (attempt {attempt}/{MAX_ATTEMPTS}; no budget to retry)") from None
             time.sleep(delay)
         if config.provider == "responses":
-            if value.get("status") != "completed":
-                raise ModelReplyError(f"model response incomplete: {value.get('status')}; {value.get('incomplete_details')}")
             output_messages = [item for item in value.get("output", [])
                                if item.get("type") == "message" and item.get("role") == "assistant"]
+            if value.get("status") != "completed":
+                details = value.get("incomplete_details") or {}
+                partial = "".join(part.get("text", "") for item in output_messages
+                                  for part in item.get("content", []) if part.get("type") == "output_text")
+                cut_off = details.get("reason") == "max_output_tokens" and bool(partial.strip())
+                raise ModelReplyError(f"model response incomplete: {value.get('status')}; {details}",
+                                      partial_text=partial if cut_off else None)
             final_messages = [item for item in output_messages if item.get("phase") == "final_answer"]
             # Intermediate updates are separate messages, even in JSON mode.
             # Concatenating them can turn two valid objects into invalid JSON or
@@ -127,9 +143,11 @@ class ModelClient:
                     "response_id": value.get("id"), "finish_reason": value["status"],
                     "transport_attempts": attempt + 1, "output_messages": output_messages}
         choice = value["choices"][0]
-        if choice.get("finish_reason") in ("length", "content_filter"):
-            raise ModelReplyError(f"model response incomplete: {choice['finish_reason']}")
         content = choice["message"].get("content")
+        if choice.get("finish_reason") in ("length", "content_filter"):
+            cut_off = choice["finish_reason"] == "length" and isinstance(content, str) and bool(content.strip())
+            raise ModelReplyError(f"model response incomplete: {choice['finish_reason']}",
+                                  partial_text=content if cut_off else None)
         if not isinstance(content, str) or not content.strip():
             raise ModelReplyError("model returned no textual candidate/strategy")
         return {"text": content, "usage": value.get("usage", {}),
@@ -174,9 +192,10 @@ class ModelClient:
             details = getattr(message, "stop_details", None)
             category = getattr(details, "category", None) or "unspecified"
             raise ModelReplyError(f"model refused the request (category: {category})")
-        if message.stop_reason == "max_tokens":
-            raise ModelReplyError("model response incomplete: max_tokens")
         content = "".join(block.text for block in message.content if block.type == "text")
+        if message.stop_reason == "max_tokens":
+            raise ModelReplyError("model response incomplete: max_tokens",
+                                  partial_text=content if content.strip() else None)
         if not content.strip():
             raise ModelReplyError("model returned no textual candidate/strategy")
         return {"text": content, "usage": message.usage.model_dump(), "provider": config.provider,

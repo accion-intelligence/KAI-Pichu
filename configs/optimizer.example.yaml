@@ -4,7 +4,7 @@ generator:
   base_url: http://localhost:8000/v1
   model: YOUR_MODEL_NAME
   api_key_env: KAI_CORE_API_KEY  # Must be set before a live run; use "" for a keyless local endpoint.
-  max_tokens: 8192
+  max_tokens: 262144
   temperature: 0.2
   timeout_seconds: 120
 # judge:  # Omit to use the generator's model configuration.
