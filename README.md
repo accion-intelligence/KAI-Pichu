@@ -21,12 +21,12 @@ You define what the operator must do, how to check it, what to beat and what to 
 
 **Three parts: a Benchmark SDK, an optimization loop, and a record of the work.**
 
-- **Benchmark SDK.** A task is a manifest plus an adapter: cases per split, input synthesis, an independent oracle, deliberately wrong outputs the validator must reject, and a declared timing boundary. Search and acceptance splits span the same input ranges; the model sees search results only. The SDK times both implementations in interleaved paired blocks and reports speedups with bootstrap intervals and a per-case regression limit. `kind: fusion` tasks hand the model kernels you already have, read-only, and ask for fewer launches.
+- **Benchmark SDK.** A task is a manifest plus an adapter: cases per split, input synthesis, an independent oracle, deliberately wrong outputs the validator must reject, and a declared timing boundary. Search and acceptance splits span the same input ranges; the model sees search results only. The SDK times both implementations in interleaved paired blocks and reports the geometric-mean speedup with bootstrap intervals alongside every case's own speedup; cases below a declared regression margin are flagged for review. `kind: fusion` tasks hand the model kernels you already have, read-only, and ask for fewer launches.
 - **Optimization loop.** Any model behind an OpenAI-compatible, Responses or Anthropic endpoint plays generator and judge:
 
   - *Generate and repair.* The generator writes the permitted implementation files. Build or correctness failures go to a diagnostic judge, which identifies one issue and proposes a focused repair.
   - *Investigate and optimize.* For valid candidates the judge reads the measured baseline and candidate values and, when enabled, an Nsight Compute profile of the search case where the candidate gained least. It can query the captured profile before proposing one bottleneck hypothesis and one code change.
-  - *Keep progress.* The loop keeps the best eligible candidate, works within round, model-call and time budgets, and resumes after interruptions.
+  - *Keep progress.* The loop builds on the latest candidate that passed every rule (correct, faster than the baseline overall, within every declared metric limit) and never ranks two passing candidates itself; the model sees every round's per-case numbers and decides. The highest-scoring candidate is kept for acceptance. Runs work within round, model-call and time budgets and resume after interruptions.
   - *Recheck.* After search, the best candidate is rerun on the held-out acceptance split and marked `accepted` only if every run passes.
 - **Record of the work.** Every request, response, candidate, report and profile is a plain file in the run directory.
 
@@ -105,7 +105,7 @@ What the SDK enforces for every task, whoever writes it:
 | --- | --- |
 | The adapter, input generation and oracle are never shown to the optimizing model | A candidate cannot specialize to the test data |
 | Every case ships deliberately wrong outputs the validator must reject | A vacuous oracle is caught at preflight |
-| Paired ABBA blocks, bootstrap intervals, a per-case regression limit | Ordinary GPU jitter is neither a speedup nor a regression |
+| Paired ABBA blocks, bootstrap intervals, per-case speedups reported beside the geometric mean | Ordinary GPU jitter is neither a speedup nor a regression, and a slow case cannot hide in an average |
 | Frozen, fingerprinted task bundle | A run cannot be rescued by editing the task under it |
 
 ## Showcase: $1, 2 hours, 4.25× over cuDNN
@@ -127,6 +127,24 @@ One packaged task, `gpt-5.6-luna` as generator and judge, 13 rounds, no target s
 
 Round 1 beat cuDNN with a shared-memory tile; the judge read the NCU profile, called the kernel issue-bound, and two rounds of register blocking took it to 4.25×. [Setup, per-round trajectory and what was left on the table →](docs/showcase-depthwise.md)
 
+## Showcase: 9× on AWQ INT4 decode, a fusion task
+
+A `kind: fusion` task built on AutoAWQ's real kernels: the baseline dequantizes INT4 weights into an FP16 matrix and calls cuBLAS, exactly as AutoAWQ does. In 20 rounds `gpt-5.6-luna` fused them into one kernel that is **up to 9.1× faster than the two-stage path** on held-out Llama shapes and **faster than AutoAWQ's own hand-written fused kernel** on two of them.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/awq-showcase-dark.svg">
+  <img src="docs/assets/awq-showcase-light.svg" alt="Bar chart of speedup over AutoAWQ's dequantize-then-cuBLAS path for 19 evaluated candidates. Round 1 reaches 5.59×, the best is 7.22× in round 17; round 7 regressed one case; three candidates failed to build or produced wrong results and were repaired in the next round." width="100%">
+</picture>
+
+| Held-out case | AutoAWQ two-stage | KAI Pichu | Speedup | AutoAWQ fused kernel |
+| --- | --- | --- | --- | --- |
+| 1×11008×4096 | 0.428 ms | 0.052 ms | **8.2×** | 5.1× |
+| 2×4096×11008 | 0.605 ms | 0.066 ms | **9.1×** | 7.9× |
+| 3×5120×13824 | 0.959 ms | 0.125 ms | **7.7×** | 9.1× |
+| 8×4096×4096 | 0.158 ms | 0.196 ms | 0.80× | 3.3× |
+
+Accepted on two held-out reruns at a geometric mean of 4.4× and 4.5×. The `M = 8` shape was never in the search split and the kernel lost 20% there; the acceptance report lists it as a regression next to the mean instead of hiding it in the average. [Setup and per-round trajectory →](docs/showcase-awq-fusion.md)
+
 ## What a run leaves behind
 
 **No accepted candidate does not mean no useful work.** Inspect the attempts, diagnostics, and source changes, not just the final status.
@@ -134,7 +152,7 @@ Round 1 beat cuDNN with a shared-memory tile; the judge read the NCU profile, ca
 ```text
 runs/my-operator/
 ├── summary.json        # final status, report links, time and model usage
-├── state.json          # history, best candidate and reserved budgets
+├── state.json          # history, latest eligible and best candidates, reserved budgets
 ├── bundle/             # frozen task and baseline
 ├── candidates/         # generated implementation snapshots
 ├── llm/                # model requests, responses and errors
@@ -158,7 +176,7 @@ The SDK controls built-in timing; adapter-defined metrics require their own boun
 | You want to… | Start here |
 | --- | --- |
 | Install, define a task and run the loop | [Quickstart](docs/QUICKSTART.md) |
-| Read the full showcase run | [Depthwise 7×7 against cuDNN](docs/showcase-depthwise.md) |
+| Read the full showcase runs | [Depthwise 7×7 against cuDNN](docs/showcase-depthwise.md), [AWQ INT4 fusion against AutoAWQ](docs/showcase-awq-fusion.md) |
 | Write a task, by hand or with Claude Code / Codex | [Benchmark manual](src/kai_core/benchmark/MANUAL.md) (`kai-core benchmark guide`); the `kai-benchmark` skill from `kai-core skill install` follows it |
 | Understand the Benchmark SDK's design | [Benchmark framework](docs/benchmark-framework.md) |
 | Explore the packaged tasks | [Depthwise 7×7 convolution against cuDNN](examples/depthwise_conv/README.md), [FP16 attention example](examples/attention/README.md) |

@@ -7,6 +7,9 @@ its `dequantize_weights` kernel to materialize FP16 weights and then calls
 AutoAWQ ships it, and asks for the first: one kernel that reads the packed
 INT4 weights, zero points and scales and never writes the FP16 matrix.
 
+A recorded optimization run on this task is described in
+[docs/showcase-awq-fusion.md](../../docs/showcase-awq-fusion.md).
+
 ## The supplied kernels
 
 | File | Origin | Role |
