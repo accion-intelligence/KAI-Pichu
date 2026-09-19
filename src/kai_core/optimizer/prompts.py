@@ -17,6 +17,11 @@ Return exactly one JSON object with two fields:
 {"hypothesis": "one concrete change and why it might help",
  "files": {"relative/source/file": "complete replacement source text"}}
 Unmentioned implementation files remain unchanged. No shell commands or prose.
+current_sources is the code of round base_round, the starting point the judge
+chose; history is a table of every round so far: status, overall and per-case
+speedups, the hypothesis, the judge's diagnosis and the round it was built on.
+Do not repeat a change the table shows already failed on this code; when the
+strategy names a different starting point, build on current_sources as given.
 """
 
 REPAIR_JUDGE = """You are a senior CUDA correctness auditor. Read the frozen
@@ -31,6 +36,18 @@ frozen benchmark, current implementation, measured performance results and
 hardware feedback. Identify exactly one bottleneck hypothesis and one concrete
 optimization method. Prefer measured evidence. If profiling is unavailable,
 state that the mechanism is unverified; do not invent counters or limitations.
+First choose the starting point. history is a table of every round: status,
+overall and per-case speedups, hypothesis, the diagnosis behind it and the round
+it was built on; every round's code is kept. current_sources is the latest
+candidate that passed all rules. best_candidate, when present, is the top overall
+score with its source. last_attempt, when present, is the latest candidate that
+failed the rules, with its own measurements and profile overview. If the table
+shows one idea failing repeatedly, change the premise, not the implementation
+details. If an earlier round is the better base for the case you target, read
+its code with {"action": "read_candidate", "rounds": [n]} (one evidence round,
+up to three rounds per request) and then set "base_round": n in the final
+answer; the generator will modify that round's code. Omit base_round to build
+on current_sources.
 The supplied profile and source must refer to the same implementation and case.
 Start from the slim overview: launches, headline measurements, metric families
 and rule count. Rule bodies and detailed counters are available on demand.
@@ -72,7 +89,8 @@ The loop reserves model calls for the final diagnosis, generation and later
 optimization rounds; respect the supplied remaining_rounds and enabled flag.
 When queries are unavailable/exhausted, or evidence is sufficient, return ONLY:
 {"bottleneck": "...", "optimization_method": "...",
-"modification_plan": "..."}."""
+"modification_plan": "...", "base_round": n}
+with base_round optional."""
 
 
 def messages(system: str, context: dict[str, Any]) -> list[dict[str, str]]:
@@ -80,9 +98,15 @@ def messages(system: str, context: dict[str, Any]) -> list[dict[str, str]]:
             {"role": "user", "content": json.dumps(context, indent=2, ensure_ascii=False)}]
 
 
-def strategy(value: dict[str, Any], *, repair: bool) -> dict[str, str]:
+def strategy(value: dict[str, Any], *, repair: bool) -> dict[str, Any]:
     required = ({"critical_issue", "why_it_matters", "minimal_fix_hint"} if repair else
                 {"bottleneck", "optimization_method", "modification_plan"})
-    if set(value) != required or any(not isinstance(v, str) for v in value.values()):
+    optional = set() if repair else {"base_round"}
+    text_fields = {key: item for key, item in value.items() if key in required}
+    if set(text_fields) != required or any(not isinstance(v, str) for v in text_fields.values()):
         raise ValueError(f"judge must return exactly these string fields: {sorted(required)}")
+    if set(value) - required - optional:
+        raise ValueError(f"judge returned unexpected fields: {sorted(set(value) - required - optional)}")
+    if "base_round" in value and (isinstance(value["base_round"], bool) or not isinstance(value["base_round"], int)):
+        raise ValueError("base_round must be an integer round number")
     return value

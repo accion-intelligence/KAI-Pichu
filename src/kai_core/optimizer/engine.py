@@ -20,28 +20,9 @@ from ..io import parse_object, write_json
 from ..models import ModelClient
 from ..profiling import ProfileQuery
 from ..workspace import Workspace
+from .history import case_lost_most, history_tables, weakest_case
 from .individual import KernelIndividual
 from .prompts import GENERATOR, OPTIMIZATION_JUDGE, REPAIR_JUDGE, messages, strategy
-
-
-def weakest_case(metrics: dict[str, Any]) -> str | None:
-    """The search case where a completed candidate gained least over the baseline.
-
-    Uses the per-case medians of the scored metric from the candidate's own
-    feedback; a candidate that is fast on one shape and slow on another needs
-    profiling evidence from the slow one.
-    """
-    objective = metrics.get("objective") or {}
-    per_case = objective.get("per_case") or {}
-    minimize = objective.get("direction", "minimize") == "minimize"
-
-    def speedup(arms: dict[str, Any]) -> float:
-        baseline, candidate = arms["baseline"]["median"], arms["candidate"]["median"]
-        return baseline / candidate if minimize else candidate / baseline
-
-    gains = {case: speedup(arms) for case, arms in per_case.items()
-             if arms["baseline"]["median"] > 0 and arms["candidate"]["median"] > 0}
-    return min(gains, key=gains.get) if gains else None
 
 
 class StopRun(RuntimeError):
@@ -134,25 +115,31 @@ class OptimizationLoop:
     def _round(self, index: int, task_context: dict[str, Any]) -> None:
         current = self.state["current"]
         repair = current is not None and not current["metrics"].get("status") == "completed"
-        anchor = current if repair else self.state["best"] or current
+        # The search builds on the newest candidate that passed the hard rules
+        # (correct, faster than the baseline overall, within every metric limit). Which of
+        # two eligible candidates is "better" is left to the model, which sees
+        # every round's per-case numbers; a harness gate on the aggregate score
+        # would discard a real gain on one case for jitter on another.
+        anchor = current if repair else self.state.get("latest_eligible") or current
         anchor_path = self._path(anchor)
         phase = "seed" if current is None else "repair" if repair else "optimization"
         context = {**task_context, "phase": phase, "current_sources": self.workspace.sources(anchor_path),
                    "feedback": anchor["metrics"] if anchor else {},
-                   "history": [{"round": row["id"], "hypothesis": row["hypothesis"], "score": row["score"],
-                                "status": row["metrics"]["status"]} for row in self.state["history"][-10:]]}
+                   "history": history_tables(self.state["history"])}
         if current is not None:
             if not repair:
-                profile = self.evaluator.profile(f"round-{index:04d}", anchor_path,
-                                                 timeout=min(self.config.budget.evaluation_seconds, self._remaining()),
-                                                 weakest_case=weakest_case(anchor["metrics"]))
-                self._verify()
-                if profile.get("process", {}).get("status") in ("resource_busy", "resource_error"):
-                    raise StopRun(profile["process"]["status"], "resource conflict during profiling")
-                context["hardware_feedback"] = profile
+                context["hardware_feedback"] = self._profile(f"round-{index:04d}", anchor_path,
+                                                             weakest_case(anchor["metrics"]), "lowest_measured_speedup")
+                if anchor["id"] != current["id"]:  # the last candidate completed but failed the eligibility rules
+                    context["last_attempt"] = self._attempt_evidence(index, current, anchor)
+                best = self.state["best"]
+                if best and best["id"] != anchor["id"]:
+                    context["best_candidate"] = self._best_candidate_evidence(best)
             raw_strategy = (self._model("judge", REPAIR_JUDGE, context) if repair
                             else self._diagnose(index, context))
             context["strategy"] = strategy(raw_strategy, repair=repair)
+            anchor, anchor_path = self._starting_point(context, anchor, anchor_path)
+        context["base_round"] = anchor["id"] + 1 if anchor else None
         try:
             reply = self._model("generator", GENERATOR, context)
             candidate = self.workspace.candidate(index, anchor_path, reply)
@@ -168,17 +155,107 @@ class OptimizationLoop:
         score = report.get("comparison", {}).get("overall", {}).get("speedup")
         ind = KernelIndividual(index, str(candidate.relative_to(self.workspace.root)), reply["hypothesis"],
                                json_fingerprint(file_inventory(candidate, self.workspace.spec.implementation.files)),
-                               feedback(report), score)
+                               feedback(report), score, diagnosis=context.get("strategy"),
+                               base_round=context.get("base_round"))
         self.state["current"] = ind.to_dict()
         self.state["history"].append(ind.to_dict())
-        if ind.runnable:
-            acceptance = report["acceptance"]
-            constraints_ok = not acceptance["unconfirmed_case_constraints"] and not acceptance["metric_limit_failure_count"]
-            lower = report["comparison"]["overall"]["interval"][0]
-            previous = self.state["best"]["score"] if self.state["best"] else 1.0
-            if constraints_ok and lower > 1.0 and score > previous:
+        if ind.runnable and self._eligible(report):
+            self.state["latest_eligible"] = ind.to_dict()
+            # The top score is bookkeeping for delivery and acceptance only; it never gates the search.
+            if not self.state["best"] or score > self.state["best"]["score"]:
                 self.state["best"] = ind.to_dict()
         self._save()
+
+    @staticmethod
+    def _eligible(report: dict[str, Any]) -> bool:
+        """Correct, faster than the baseline with confidence overall, and within every metric limit.
+
+        Per-case regressions are reported in the feedback and the history table
+        for the model to weigh; they do not disqualify a candidate.
+        """
+        acceptance = report["acceptance"]
+        return not acceptance["metric_limit_failure_count"] and report["comparison"]["overall"]["interval"][0] > 1.0
+
+    def _best_candidate_evidence(self, best: dict[str, Any]) -> dict[str, Any]:
+        """The highest-scoring eligible candidate, when the search has moved on from it.
+
+        The model decides whether to carry that code forward; it can only do so
+        if it can see it.
+        """
+        return {"round": best["id"] + 1, "score": best["score"], "hypothesis": best["hypothesis"],
+                "feedback": best["metrics"], "sources": self.workspace.sources(self._path(best)),
+                "note": "Highest overall speedup so far. current_sources are the latest eligible candidate; "
+                        "this one is kept for acceptance unless a later candidate scores higher."}
+
+    def _profile(self, tag: str, path: Path, case: str | None, policy: str) -> dict[str, Any]:
+        profile = self.evaluator.profile(tag, path, timeout=min(self.config.budget.evaluation_seconds, self._remaining()),
+                                         weakest_case=case, policy=policy)
+        self._verify()
+        if profile.get("process", {}).get("status") in ("resource_busy", "resource_error"):
+            raise StopRun(profile["process"]["status"], "resource conflict during profiling")
+        return profile
+
+    def _attempt_evidence(self, index: int, attempt: dict[str, Any], anchor: dict[str, Any]) -> dict[str, Any]:
+        """Measurements and a profile of the last candidate that ran but failed the eligibility rules.
+
+        The judge diagnoses the anchor's source, but the reason the previous
+        attempt failed is only visible in the attempt itself. Profiling the
+        anchor alone would show the judge the same picture every round and
+        invite the same proposal; this evidence is what the attempt looked like
+        on the case where it fell furthest behind the anchor.
+        """
+        profile = self._profile(f"round-{index:04d}-attempt", self._path(attempt),
+                                case_lost_most(attempt["metrics"], anchor["metrics"]), "lowest_speedup_relative_to_anchor")
+        return {"round": attempt["id"] + 1, "hypothesis": attempt["hypothesis"], "diagnosis": attempt.get("diagnosis"),
+                "feedback": attempt["metrics"],
+                "hardware_feedback": {key: profile.get(key) for key in ("status", "case_selection", "workload", "evidence")},
+                "note": "This candidate ran but failed the eligibility rules (a metric limit, or no confirmed gain "
+                        "over the baseline); profile queries address the current sources' profile, this one is an "
+                        "overview only."}
+
+    def _saved_round(self, round_number: Any) -> dict[str, Any] | None:
+        """The history row of a 1-based round whose candidate is still on disk and unchanged."""
+        if isinstance(round_number, bool) or not isinstance(round_number, int):
+            return None
+        for row in self.state["history"]:
+            if row["id"] + 1 == round_number:
+                try:
+                    self._path(row)
+                except (OSError, ValueError):
+                    return None
+                return row
+        return None
+
+    def _starting_point(self, context: dict[str, Any], anchor: dict[str, Any], anchor_path: Path):
+        """Honor the judge's base_round when it names a saved candidate; otherwise keep the anchor."""
+        requested = context["strategy"].get("base_round")
+        if requested is None or requested == anchor["id"] + 1:
+            return anchor, anchor_path
+        row = self._saved_round(requested)
+        if row is None:
+            context["strategy_note"] = (f"base_round {requested} names no saved candidate; "
+                                        f"the generator builds on round {anchor['id'] + 1}")
+            return anchor, anchor_path
+        path = self._path(row)
+        context["current_sources"] = self.workspace.sources(path)
+        return row, path
+
+    def _read_candidates(self, requests: Any) -> list[dict[str, Any]]:
+        """Sources of up to three saved rounds, for a judge choosing where to start."""
+        if not isinstance(requests, list) or not 1 <= len(requests) <= 3:
+            return [{"status": "unavailable", "error": {"message": "read_candidate takes 1..3 round numbers"}}]
+        results = []
+        for number in requests:
+            row = self._saved_round(number)
+            if row is None:
+                results.append({"round": number, "status": "unavailable",
+                                "error": {"message": "no saved candidate for this round"}})
+                continue
+            results.append({"round": number, "status": "available", "hypothesis": row["hypothesis"],
+                            "score": row["score"], "result": row["metrics"].get("status"),
+                            "diagnosis": row.get("diagnosis"), "base_round": row.get("base_round"),
+                            "sources": self.workspace.sources(self._path(row))})
+        return results
 
     def _diagnose(self, index: int, context: dict[str, Any]) -> dict[str, Any]:
         settings = self.config.profile
@@ -190,13 +267,30 @@ class OptimizationLoop:
             remaining_calls = self.config.budget.llm_calls - self.state["llm_calls"]
             reserved_future_calls = 2 * max(0, self.config.budget.rounds - index - 1)
             evidence_calls = max(0, remaining_calls - reserved_future_calls - 2)
-            enabled = bool(profile.get("query_available")) and query_round < settings.query_rounds and evidence_calls > 0
+            evidence_ok = query_round < settings.query_rounds and evidence_calls > 0
+            enabled = bool(profile.get("query_available")) and evidence_ok
+            context["candidate_reads"] = {
+                "enabled": evidence_ok,
+                "saved_rounds": [row["id"] + 1 for row in self.state["history"]],
+                "note": "read_candidate returns the saved code of past rounds; it shares the evidence budget with profile queries",
+            }
             context["profile_query"] = {"enabled": enabled,
                 "remaining_rounds": min(settings.query_rounds - query_round, evidence_calls) if enabled else 0,
                 "reserved_future_calls": reserved_future_calls,
                 "max_queries": settings.queries_per_round, "schema": ProfileQuery.model_json_schema()}
             response = self._model("judge", OPTIMIZATION_JUDGE, context)
-            if response.get("action") != "query_profile":
+            action = response.get("action")
+            if action == "read_candidate":
+                if not evidence_ok:
+                    raise StopRun("model_error", "judge requested candidate sources after the diagnostic budget was exhausted")
+                if set(response) - {"action", "rounds"}:
+                    results = [{"status": "unavailable", "error": {"message": "read_candidate takes only rounds"}}]
+                else:
+                    results = self._read_candidates(response.get("rounds"))
+                context.setdefault("candidate_sources", []).extend(results)
+                query_round += 1
+                continue
+            if action != "query_profile":
                 return response
             if not enabled:
                 raise StopRun("model_error", "judge requested profile queries after the diagnostic budget was exhausted")
@@ -214,7 +308,7 @@ class OptimizationLoop:
                 for request in requests:
                     self._verify()
                     # Validate the same source anchor before and after report queries.
-                    anchor = self.state["best"] or self.state["current"]
+                    anchor = self.state.get("latest_eligible") or self.state["current"]
                     self._path(anchor)
                     results.append(self.evaluator.query_profile(profile["profile_id"], request,
                         timeout=min(settings.query_seconds, self._remaining())))
@@ -299,7 +393,7 @@ class OptimizationLoop:
                 self.state = {"schema_version": 1, "status": "created", "config_fingerprint": config_fingerprint,
                               "frozen_fingerprint": self.workspace.fingerprint(), "next_round": 0,
                               "llm_calls": 0, "role_calls": {"generator": 0, "judge": 0}, "evaluations": 0,
-                              "current": None, "best": None, "history": [], "usage": [],
+                              "current": None, "best": None, "latest_eligible": None, "history": [], "usage": [],
                               "acceptance_reports": [], "elapsed_seconds": 0.0}
                 write_json(root / "config.json", self.config.model_dump())
             self._save()

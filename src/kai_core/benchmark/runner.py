@@ -281,24 +281,36 @@ class Runner:
         return report
 
     def _acceptance(self, comparison: dict[str, Any]) -> dict[str, Any]:
+        """The verdict: the overall geometric-mean speedup decides, per-case speedups are reported beside it.
+
+        A case whose speedup interval falls below the declared regression
+        margin is listed, not vetoed; the task owner reads both numbers. Metric
+        limits remain hard bounds.
+        """
         objective = self.spec.objective
         lower, upper = comparison["overall"]["interval"]
         threshold = objective.target_speedup or 1.0
         target_met = lower >= threshold if objective.target_speedup else lower > 1.0
-        case_failures = []
+        case_speedups = {case: {"speedup": estimate["speedup"], "interval": list(estimate["interval"])}
+                         for case, estimate in comparison["cases"].items()}
+        case_regressions: list[str] = []
         if objective.max_case_regression is not None:
             limit = objective.max_case_regression
             minimum = 1 / (1 + limit) if objective.direction == "minimize" else 1 - limit
-            case_failures = [case for case, estimate in comparison["cases"].items()
-                             if estimate["interval"][0] < minimum]
-        accepted = target_met and not case_failures and not self.limit_failures
-        verdict = ("accepted" if accepted else "constraint_failed" if case_failures or self.limit_failures
+            case_regressions = [case for case, estimate in comparison["cases"].items()
+                                if estimate["interval"][0] < minimum]
+        accepted = target_met and not self.limit_failures
+        verdict = ("accepted" if accepted else "limit_failed" if self.limit_failures
                    else "regressed" if upper < 1 else "improved_below_target" if lower > 1 else "inconclusive")
         return {
             "accepted": accepted, "verdict": verdict, "target_met": target_met,
             "target_speedup": objective.target_speedup,
-            "unconfirmed_case_constraints": case_failures,
+            "overall_speedup": comparison["overall"]["speedup"], "overall_interval": list(comparison["overall"]["interval"]),
+            "case_speedups": case_speedups,
+            "case_regressions": case_regressions, "regression_margin": objective.max_case_regression,
             "metric_limit_failure_count": len(self.limit_failures),
             "metric_limit_failures": self.limit_failures[:20],
-            "note": "Acceptance uses pointwise confidence bounds. An independent frozen-candidate rerun is required for release.",
+            "note": "The overall geometric-mean speedup decides acceptance; case_regressions lists cases whose "
+                    "speedup interval falls below 1/(1+regression_margin) for review. Pointwise confidence bounds; "
+                    "an independent frozen-candidate rerun is required for release.",
         }

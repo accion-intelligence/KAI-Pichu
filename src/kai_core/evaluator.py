@@ -131,12 +131,13 @@ class Evaluator:
         return report
 
     def profile(self, tag: str, candidate: Path, *, timeout: float,
-                weakest_case: str | None = None) -> dict[str, Any]:
+                weakest_case: str | None = None, policy: str = "lowest_measured_speedup") -> dict[str, Any]:
         """Capture one NCU profile of the candidate on a single search case.
 
         A candidate may dispatch different code by input shape, and one shape's
         profile says nothing about another's, so the capture follows the case
-        where the candidate gained least unless the configuration pins a case.
+        the caller names (by default the one where the candidate gained least)
+        unless the configuration pins a case.
         """
         settings = self.config.profile
         if not settings.enabled:
@@ -163,7 +164,7 @@ class Evaluator:
             command.extend("--section=" + section for section in settings.sections)
         command += [sys.executable, "-m", "kai_core.profile_worker", str(self.workspace.manifest),
                     "--candidate", str(candidate), "--output", str(metadata)]
-        case_selection = self._profile_case_selection(weakest_case)
+        case_selection = self._profile_case_selection(weakest_case, policy)
         if case_selection["case_id"]:
             command += ["--case", case_selection["case_id"]]
         execution = run_process(command, cwd=self.workspace.root, log=output / "process.log", timeout=timeout,
@@ -190,12 +191,12 @@ class Evaluator:
         write_json(output / "profile.json", result)
         return result
 
-    def _profile_case_selection(self, weakest_case: str | None) -> dict[str, Any]:
+    def _profile_case_selection(self, weakest_case: str | None, policy: str) -> dict[str, Any]:
         configured = self.config.profile.case_id
         if configured:
             return {"case_id": configured, "policy": "configured"}
         if weakest_case:
-            return {"case_id": weakest_case, "policy": "lowest_measured_speedup"}
+            return {"case_id": weakest_case, "policy": policy}
         return {"case_id": None, "policy": "first_search_case"}
 
     def query_profile(self, profile_id: str, request: dict[str, Any], *, timeout: float) -> dict[str, Any]:

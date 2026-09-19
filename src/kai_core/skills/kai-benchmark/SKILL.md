@@ -49,7 +49,7 @@ kai-core benchmark schema           # manifest JSON Schema
    (CUDA graph between two external events, L2 eviction, output poisoning) as
    the objective, with the SDK's `latency_ms` as diagnostic. Plain-language
    `boundary` and `cache_policy`. GPU examples use `warmup: 10`, `blocks: 40`,
-   `iterations: 10`; keep `max_case_regression` at the 0.05 default.
+   `iterations: 10`; keep `max_case_regression` at the 0.05 default (cases below it are reported, the overall geometric mean decides).
 7. **Validate.**
    ```bash
    kai-core benchmark validate benchmark.yaml --split smoke      --checks-only --output checks-smoke.json

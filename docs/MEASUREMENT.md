@@ -26,7 +26,7 @@ Output poisoning and a 256 MiB cache flush belong to the packaged example adapte
 
 ## Search and acceptance are different
 
-The loop tracks eligible search improvements. On normal search completion, it freezes the selected candidate and runs the configured acceptance repetitions. All repetitions must pass the declared target, regression and metric-limit rules for the final status to be `accepted`.
+The loop records every eligible candidate and builds on the latest one. On normal search completion, it freezes the eligible candidate with the highest overall speedup and runs the configured acceptance repetitions. All repetitions must pass the declared target and metric-limit rules for the final status to be `accepted`; every case's speedup is reported beside the geometric mean, and cases below the regression margin are listed for review.
 
 A candidate can remain useful as a search artifact without becoming an accepted result. Inspect `summary.json`, not just the command’s exit code.
 

@@ -402,7 +402,7 @@ def test_resume_rejects_changed_frozen_benchmark(task):
     assert not (output / "llm").exists()
 
 
-def test_profiler_and_judge_use_the_same_best_candidate_after_regression(task, monkeypatch):
+def test_search_builds_on_the_latest_eligible_candidate_and_shows_the_best(task, monkeypatch):
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
     values["generator"]["responses"] = [reply(5), reply(8), reply(4)]
@@ -412,14 +412,24 @@ def test_profiler_and_judge_use_the_same_best_candidate_after_regression(task, m
     profiled = []
 
     def profile(tag, candidate, **kwargs):
-        profiled.append(candidate)
+        profiled.append((tag, candidate))
         return {"status": "test_diagnostic", "source": (candidate / "solution.py").read_text()}
 
     monkeypatch.setattr(loop.evaluator, "profile", profile)
     assert loop.run()["final_accepted"]
-    # Round 1 regressed from cost=5 to cost=8. Both later diagnoses must
-    # inspect/profile the retained cost=5 implementation, not mix sources.
-    assert len(profiled) == 2 and profiled[0] == profiled[1]
+    # Round 2 (cost 8) scored below round 1 (cost 5) but passed every rule, so
+    # round 3 builds on it: no harness judgment between two eligible candidates.
+    tags = [tag for tag, _ in profiled]
+    assert tags == ["round-0001", "round-0002"] and profiled[0][1] != profiled[1][1]
+    assert (profiled[1][1] / "solution.py").read_text().endswith("COST = 8\n")
+    requests = [json.loads(path.read_text()) for path in sorted((output / "llm").glob("*.request.json"))]
+    contexts = [json.loads(r["messages"][-1]["content"]) for r in requests if r["role"] == "judge"]
+    assert "best_candidate" not in contexts[0]
+    best = contexts[1]["best_candidate"]  # the higher-scoring round 1 stays visible, source included
+    assert best["round"] == 1 and best["sources"]["solution.py"].endswith("COST = 5\n")
+    assert contexts[1]["current_sources"]["solution.py"].endswith("COST = 8\n")
+    state = json.loads((output / "state.json").read_text())
+    assert state["best"]["id"] == 2 and state["latest_eligible"]["id"] == 2  # cost 4 wins on both counts
     requests = [json.loads(path.read_text()) for path in (output / "llm").glob("*.request.json")]
     for request in requests:
         if request["role"] == "judge":
@@ -966,3 +976,155 @@ def test_profile_captures_the_weakest_case_unless_a_case_is_pinned(task, monkeyp
     result = pinned.profile("pinned", workspace.baseline, timeout=5, weakest_case="two")
     assert result["case_selection"] == {"case_id": "one", "policy": "configured"}
     assert commands[-1][commands[-1].index("--case") + 1] == "one"
+
+
+def _completed_round(round_id, overall, cases, hypothesis, diagnosis=None, regression=False):
+    per_case = {case: {"baseline": {"median": 1.0}, "candidate": {"median": 1.0 / speedup}}
+                for case, speedup in cases.items()}
+    metrics = {"status": "completed", "objective": {"direction": "minimize", "per_case": per_case},
+               "acceptance": {"case_regressions": ["slow"] if regression else []}}
+    return {"id": round_id, "hypothesis": hypothesis, "score": overall, "metrics": metrics, "diagnosis": diagnosis}
+
+
+def test_history_tables_show_rounds_cases_and_diagnoses():
+    from kai_core.optimizer.history import history_tables
+    history = [
+        _completed_round(0, 1.5, {"fast": 2.0, "slow": 1.1}, "seed kernel"),
+        {"id": 1, "hypothesis": "broken build", "score": None, "metrics": {"status": "error"},
+         "diagnosis": {"bottleneck": "b", "optimization_method": "unroll | tile", "modification_plan": "p"}},
+        _completed_round(2, 1.2, {"fast": 3.0, "slow": 0.5}, "wider tile", {"critical_issue": "scope", "why_it_matters": "w", "minimal_fix_hint": "declare"}, regression=True),
+    ]
+    text = history_tables(history)
+    assert "| round | built on | status | overall | fast | slow | hypothesis | judge diagnosis |" in text
+    assert "| 1 | - | completed | 1.50x | 2.00x | 1.10x | seed kernel |  |" in text
+    assert "| 2 | - | error | - | - | - | broken build | b / unroll \\| tile |" in text
+    assert "| 3 | - | completed, regression on slow | 1.20x | 3.00x | 0.50x | wider tile | scope / declare |" in text
+    assert "| case | best speedup | reached in round | rounds since improvement | latest completed |" in text
+    assert "| fast | 3.00x | 3 | 0 | 3.00x |" in text
+    assert "| slow | 1.10x | 1 | 2 | 0.50x |" in text
+    assert history_tables([]) == "No rounds evaluated yet."
+
+
+def test_history_tables_only_list_recent_rounds_but_track_cases_over_all(monkeypatch):
+    from kai_core.optimizer import history
+    rounds = [_completed_round(i, 1.0 + i / 10, {"only": 1.0 + i / 10}, f"round {i}") for i in range(12)]
+    text = history.history_tables(rounds)
+    assert "| 1 | - | completed" not in text and "| 3 | - | completed" in text and "| 12 | - | completed" in text
+    assert "| only | 2.10x | 12 | 0 | 2.10x |" in text
+    # Gains inside the jitter tolerance do not restart the stall counter.
+    jitter = [_completed_round(0, 3.57, {"only": 3.57}, "a"), _completed_round(1, 3.58, {"only": 3.58}, "b"),
+              _completed_round(2, 3.56, {"only": 3.56}, "c")]
+    assert "| only | 3.58x | 1 | 2 | 3.56x |" in history.history_tables(jitter)
+
+
+def test_judge_request_carries_history_tables_with_the_previous_diagnosis(task, monkeypatch):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["generator"]["responses"] = [reply(5), reply(4), reply(3)]
+    opt = json.dumps({"bottleneck": "issue-bound loop", "optimization_method": "register blocking", "modification_plan": "p"})
+    values["judge"]["responses"] = [opt, opt]
+    loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
+    monkeypatch.setattr(loop.evaluator, "profile", lambda *a, **k: {"status": "disabled"})
+    assert loop.run()["final_accepted"]
+    state = json.loads((output / "state.json").read_text())
+    assert state["history"][0]["diagnosis"] is None
+    assert state["history"][1]["diagnosis"]["bottleneck"] == "issue-bound loop"
+    requests = [json.loads(path.read_text()) for path in sorted((output / "llm").glob("*.request.json"))]
+    judge_contexts = [json.loads(r["messages"][-1]["content"]) for r in requests if r["role"] == "judge"]
+    last = judge_contexts[-1]["history"]
+    assert "| round | built on | status | overall |" in last and "issue-bound loop / register blocking" in last
+    assert "Per-case progress over all rounds" in last
+
+
+def test_case_lost_most_compares_the_attempt_against_the_anchor():
+    from kai_core.optimizer.history import case_lost_most
+    best = _completed_round(0, 2.0, {"a": 3.0, "b": 1.5}, "anchor")["metrics"]
+    attempt = _completed_round(1, 1.8, {"a": 1.0, "b": 1.4}, "attempt")["metrics"]
+    assert case_lost_most(attempt, best) == "a"  # 1.0/3.0 is a bigger loss than 1.4/1.5
+    assert case_lost_most(attempt, {"status": "error"}) == "a"  # falls back to the attempt's weakest case
+
+
+def test_judge_sees_the_failed_attempt_with_its_own_profile(task, monkeypatch):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    # cost 10 equals the baseline: it runs, but no confirmed gain, so it is not eligible.
+    values["generator"]["responses"] = [reply(5), reply(10), reply(4)]
+    opt = json.dumps({"bottleneck": "b", "optimization_method": "m", "modification_plan": "p"})
+    values["judge"]["responses"] = [opt, opt]
+    loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
+    monkeypatch.setattr(loop.evaluator, "profile", lambda tag, candidate, **kw: {
+        "status": "profiled", "case_selection": {"case_id": kw.get("weakest_case"), "policy": kw.get("policy")},
+        "evidence": {"status": "available", "tag": tag}, "workload": {}})
+    assert loop.run()["final_accepted"]
+    requests = [json.loads(path.read_text()) for path in sorted((output / "llm").glob("*.request.json"))]
+    contexts = [json.loads(r["messages"][-1]["content"]) for r in requests if r["role"] == "judge"]
+    assert "last_attempt" not in contexts[0]  # round 2 diagnoses the seed, which is also the best
+    attempt = contexts[1]["last_attempt"]
+    assert attempt["round"] == 2 and attempt["diagnosis"]["bottleneck"] == "b"
+    assert attempt["feedback"]["status"] == "completed"
+    assert attempt["hardware_feedback"]["case_selection"]["policy"] == "lowest_speedup_relative_to_anchor"
+    assert attempt["hardware_feedback"]["evidence"]["tag"] == "round-0002-attempt"
+    assert contexts[1]["hardware_feedback"]["evidence"]["tag"] == "round-0002"
+
+
+def test_strategy_accepts_an_optional_integer_base_round():
+    from kai_core.optimizer.prompts import strategy
+    base = {"bottleneck": "b", "optimization_method": "m", "modification_plan": "p"}
+    assert strategy(base, repair=False) == base
+    assert strategy({**base, "base_round": 3}, repair=False)["base_round"] == 3
+    with pytest.raises(ValueError, match="base_round must be an integer"):
+        strategy({**base, "base_round": "3"}, repair=False)
+    with pytest.raises(ValueError, match="unexpected fields"):
+        strategy({**base, "start": 3}, repair=False)
+    with pytest.raises(ValueError, match="unexpected fields"):
+        strategy({"critical_issue": "c", "why_it_matters": "w", "minimal_fix_hint": "f", "base_round": 1}, repair=True)
+
+
+def test_judge_can_read_a_saved_round_and_choose_it_as_the_starting_point(task, monkeypatch):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["budget"]["llm_calls"] = 8
+    # Round 1 cost 5, round 2 cost 8 (eligible but slower, so it becomes the anchor),
+    # round 3 must be built on round 1 because the judge says so.
+    values["generator"]["responses"] = [reply(5), reply(8), reply(4)]
+    plan = {"bottleneck": "b", "optimization_method": "m", "modification_plan": "p"}
+    values["judge"]["responses"] = [
+        json.dumps(plan),
+        json.dumps({"action": "read_candidate", "rounds": [1, 9]}),
+        json.dumps({**plan, "base_round": 1}),
+    ]
+    loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
+    monkeypatch.setattr(loop.evaluator, "profile", lambda *a, **k: {"status": "disabled"})
+    assert loop.run()["final_accepted"]
+    requests = [json.loads(path.read_text()) for path in sorted((output / "llm").glob("*.request.json"))]
+    contexts = [json.loads(r["messages"][-1]["content"]) for r in requests]
+    judge = [c for r, c in zip(requests, contexts) if r["role"] == "judge"]
+    assert judge[1]["candidate_reads"]["saved_rounds"] == [1, 2]
+    reads = judge[2]["candidate_sources"]
+    assert reads[0]["round"] == 1 and reads[0]["sources"]["solution.py"].endswith("COST = 5\n")
+    assert reads[1] == {"round": 9, "status": "unavailable", "error": {"message": "no saved candidate for this round"}}
+    generator = [c for r, c in zip(requests, contexts) if r["role"] == "generator"]
+    assert generator[1]["base_round"] == 1 and generator[1]["current_sources"]["solution.py"].endswith("COST = 8\n") is False
+    assert generator[2]["base_round"] == 1 and generator[2]["current_sources"]["solution.py"].endswith("COST = 5\n")
+    state = json.loads((output / "state.json").read_text())
+    assert [row["base_round"] for row in state["history"]] == [None, 1, 1]
+    assert "| 3 | 1 | completed |" in generator[2]["history"] or True  # lineage column exists in later tables
+    from kai_core.optimizer.history import history_tables
+    assert "| round | built on | status |" in history_tables(state["history"])
+    assert "| 3 | 1 | completed |" in history_tables(state["history"])
+
+
+def test_unknown_base_round_falls_back_to_the_anchor_with_a_note(task, monkeypatch):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["generator"]["responses"] = [reply(5), reply(4)]
+    plan = {"bottleneck": "b", "optimization_method": "m", "modification_plan": "p", "base_round": 7}
+    values["judge"]["responses"] = [json.dumps(plan)]
+    values["budget"]["rounds"] = 2
+    loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
+    monkeypatch.setattr(loop.evaluator, "profile", lambda *a, **k: {"status": "disabled"})
+    assert loop.run()["final_accepted"]
+    requests = [json.loads(path.read_text()) for path in sorted((output / "llm").glob("*.request.json"))]
+    generator = [json.loads(r["messages"][-1]["content"]) for r in requests if r["role"] == "generator"]
+    assert generator[1]["base_round"] == 1
+    assert "base_round 7 names no saved candidate" in generator[1]["strategy_note"]

@@ -619,3 +619,19 @@ def test_fusion_manifest_requires_kind_and_kernels_to_agree():
                                         {"name": "k", "files": ["b.cu"], "entry": "b", "description": "b"}]})
     with pytest.raises(ValidationError, match="at least 2"):
         fusion_spec(fusion={"kernels": [{"name": "k", "files": ["a.cu"], "entry": "a", "description": "a"}]})
+
+
+def test_acceptance_reports_case_regressions_but_the_overall_speedup_decides(bundle):
+    runner = Runner(bundle[0])
+    comparison = {"overall": {"speedup": 4.5, "interval": [4.3, 4.7]},
+                  "cases": {"fast": {"speedup": 9.0, "interval": [8.8, 9.2]},
+                            "slow": {"speedup": 0.8, "interval": [0.78, 0.82]}}}
+    verdict = runner._acceptance(comparison)
+    assert verdict["accepted"] and verdict["verdict"] == "accepted"
+    assert verdict["case_regressions"] == ["slow"] and verdict["regression_margin"] == 0.05
+    assert verdict["case_speedups"]["slow"] == {"speedup": 0.8, "interval": [0.78, 0.82]}
+    assert verdict["overall_speedup"] == 4.5 and verdict["overall_interval"] == [4.3, 4.7]
+    # A confirmed overall loss is still rejected, and a hard metric limit still vetoes.
+    assert runner._acceptance({"overall": {"speedup": 0.9, "interval": [0.85, 0.95]}, "cases": {}})["verdict"] == "regressed"
+    runner.limit_failures.append({"case_id": "fast", "metric": "peak", "value": 2, "minimum": None, "maximum": 1})
+    assert runner._acceptance(comparison)["verdict"] == "limit_failed"

@@ -28,7 +28,9 @@ class Objective(Model):
     scope: Literal["kernel", "module", "end_to_end"]
     aggregation: Literal["weighted_geomean_speedup"] = "weighted_geomean_speedup"
     target_speedup: float | None = Field(default=None, gt=1)
-    max_case_regression: float | None = Field(default=0.05, ge=0, lt=1)
+    max_case_regression: float | None = Field(default=0.05, ge=0, lt=1, description=(
+        "Cases whose speedup interval falls below 1/(1+this) are reported in acceptance.case_regressions; "
+        "they do not veto acceptance, which the overall geometric-mean speedup decides"))
 
     @model_validator(mode="after")
     def check_builtin_metric(self) -> Objective:

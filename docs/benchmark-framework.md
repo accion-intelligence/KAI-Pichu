@@ -161,11 +161,13 @@ shows what is being measured, without judging measurement stability. Defaults:
 draws and 95% confidence. These are starting settings, not a certification of
 accuracy on all workloads.
 
-For A/B, the lower speedup bound must meet `target_speedup`, or exceed 1 if
-there is no target. Each case must meet its regression constraint using the
-lower bound. For minimize, a maximum fractional latency regression `r` means
-speedup ≥ `1/(1+r)`; for maximize it means speedup ≥ `1-r`. Additional metric
-limits apply to EVERY raw candidate invocation, not just its average.
+For A/B, the lower bound of the overall geometric-mean speedup must meet
+`target_speedup`, or exceed 1 if there is no target; that decides acceptance.
+Every case's own speedup and interval are reported beside it, and a case whose
+lower bound falls below the regression margin (`1/(1+r)` for minimize, `1-r`
+for maximize, with `r = max_case_regression`) is listed in `case_regressions`
+for the task owner to weigh; it does not veto. Metric limits are hard bounds and
+apply to EVERY raw candidate invocation, not just its average.
 
 `accepted` describes this split and measurement session only. Freeze the chosen
 candidate and run acceptance on independently collected data/sessions before

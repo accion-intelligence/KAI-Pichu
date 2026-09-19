@@ -12,7 +12,7 @@ A run freezes the task and baseline into its own workspace. Before generating CU
 
 ## The first candidate
 
-The generator receives the task description, current implementation source, hardware context from preflight, and editable-file list. It returns a concrete hypothesis and complete replacement contents for the files it changes. The workspace constructs and evaluates a candidate snapshot. It does not apply generated changes to the original source checkout.
+The generator receives the task description, current implementation source, hardware context from preflight, the editable-file list, and the round history: a table of the recent rounds with overall and per-case speedups, each round's hypothesis and the judge diagnosis behind it, plus a per-case table of the best speedup, when it was reached and how many rounds it has stalled. The judge receives the same history alongside the measurements and profile, and chooses the starting point: it can read the saved code of any past round (`read_candidate`, sharing the evidence budget with profile queries) and name the round the generator should modify (`base_round`); by default the generator builds on the latest eligible candidate. Every round's code stays under `candidates/` for the run's lifetime. When the previous round's candidate completed but did not replace the best, the judge also receives that attempt's measurements and a profile overview of it, taken on the case where it fell furthest behind the best, so a failed idea is diagnosed from its own evidence rather than proposed again from the best candidate's profile. It returns a concrete hypothesis and complete replacement contents for the files it changes. The workspace constructs and evaluates a candidate snapshot. It does not apply generated changes to the original source checkout.
 
 ## Feedback loop 1: diagnose and repair
 
@@ -22,7 +22,7 @@ This path does not treat a broken candidate as a performance optimization target
 
 ## Feedback loop 2: investigate and optimize
 
-For valid candidates, the loop starts from the best eligible candidate when one exists. Otherwise it uses the current candidate. The judge receives the source, measurements, and recent hypotheses/results.
+For valid candidates, the loop starts from the latest candidate that passed the eligibility rules (correct, a confirmed gain over the baseline overall, no metric-limit failure; per-case regressions are reported, not vetoed) when one exists; otherwise it uses the current candidate. The harness never ranks two eligible candidates against each other: a real gain on one case would be lost to measurement jitter on another. When an earlier candidate holds the highest overall speedup, its measurements and source travel with the context so the model can carry that code forward. The judge receives the source, measurements, and recent hypotheses/results.
 
 After a completed A/B evaluation, feedback includes the scored metric’s mean, median, minimum, maximum, and sample count for each case and arm, together with its unit, direction, scope, and boundary. Other recorded metrics are identified as unscored. The generator receives this feedback alongside the judge’s strategy. These descriptive statistics do not replace the paired-block speedup or its confidence interval; reports without A/B measurements do not include this summary.
 

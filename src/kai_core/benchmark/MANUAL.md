@@ -86,7 +86,7 @@ overwritten.
 | `objective.direction` | `minimize` / `maximize` | |
 | `objective.scope` | `kernel` / `module` / `end_to_end` | Documents what the boundary covers |
 | `objective.target_speedup` | number > 1, optional | Acceptance requires the lower confidence bound to reach it; omit to accept any confirmed improvement |
-| `objective.max_case_regression` | fraction, default `0.05` | No case may regress more than this (lower bound of its speedup interval below `1/(1+r)` fails) |
+| `objective.max_case_regression` | fraction, default `0.05` | Cases whose speedup interval falls below `1/(1+r)` are listed in `acceptance.case_regressions` for review; acceptance itself is decided by the overall geometric-mean speedup |
 | `measurement.timer` | `wall` (default) / `cuda_event` | SDK timer for `latency_ms`; see section 8 |
 | `measurement.device` | int, default 0 | CUDA device index for `cuda_event` |
 | `measurement.warmup` | int, default 5 | Untimed invocations per case and fixture before timing |
@@ -235,7 +235,7 @@ work the metric must include happens inside `run`.
 
 Warm-up and sampling: the GPU examples use `warmup: 10`, `blocks: 40`,
 `iterations: 10`. Do not chase run-to-run noise with more samples; the paired
-design and the `max_case_regression` margin of 5% absorb ordinary jitter.
+design absorbs ordinary jitter, and a case is only reported as a regression below the 5% `max_case_regression` margin.
 Never time under a profiler, and keep the GPU otherwise idle.
 
 Custom metrics (energy, bytes, a score) use their own names, documented
@@ -268,7 +268,7 @@ not widen a tolerance or remove a probe to make a command pass.
 `ready`), plus provenance: spec, cases, input fingerprints, source digests,
 SDK version and timing environment. `run` adds `candidate_checks`, raw
 `records`, `comparison` (overall and per-case speedup with intervals) and
-`acceptance` (`verdict`, `unconfirmed_case_constraints`, `metric_limit_failures`).
+`acceptance` (`verdict`, `overall_speedup` with its interval, `case_speedups`, `case_regressions`, `metric_limit_failures`).
 
 | Exit | Meaning |
 | --- | --- |
@@ -287,10 +287,14 @@ kai-core optimize … --resume                 # continue an interrupted run; on
 
 The optimizer freezes the task bundle, runs the search preflight, then each
 round generates one candidate, evaluates it on the search split, profiles the
-best candidate on the search case where it gained least, and asks the judge for
-the next change. After the last round the best candidate is rerun on
-acceptance. The agent may change only `implementation.files`; a requested change
-to inputs, oracle, tolerance or weights is a new task version and a new run.
+latest eligible candidate (correct, faster than the baseline with confidence,
+within every metric limit) on the search case where it gained least, and asks the
+judge for the next change. Two eligible candidates are never ranked by the
+harness; the model sees every round's per-case results and the top-scoring
+candidate's source and decides what to build on. After the last round the
+top-scoring eligible candidate is rerun on acceptance. The agent may change
+only `implementation.files`; a requested change to inputs, oracle, tolerance or
+weights is a new task version and a new run.
 
 ## 12. Deliverable checklist
 
