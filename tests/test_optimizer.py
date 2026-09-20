@@ -1356,3 +1356,56 @@ def test_a_finished_run_continues_when_rounds_are_raised(task, monkeypatch):
     assert state["continued_after"] == [{"status": "accepted", "rounds": 2}]
     assert len(state["acceptance_reports"]) == values["budget"]["acceptance_repeats"]
     assert (output / "accepted" / "solution.py").read_text().endswith("COST = 2\n")
+
+
+def test_gpu_guard_treats_placeholder_process_rows_as_unreadable_not_fatal(monkeypatch):
+    from kai_pichu import process
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    rows = [["GPU-zero", "[GPU access blocked by the operating system]"], ["GPU-zero", "4242"]]
+    monkeypatch.setattr(process, "_query", lambda fields, apps=False: rows if apps else [["0", "GPU-zero"]])
+    monkeypatch.setattr(os, "getpgid", lambda pid: 4242)
+    sample = GpuGuard(0).inspect(group=4242)
+    assert sample["own_pids"] == [4242] and sample["foreign_pids"] == []
+    assert sample["unreadable"] == ["[GPU access blocked by the operating system]"]
+
+
+def test_a_transient_guard_failure_does_not_end_the_process(tmp_path, monkeypatch):
+    from kai_pichu import process
+    calls = 0
+
+    class Guard:
+        def __init__(self, device):
+            pass
+
+        def inspect(self, group=None):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise ValueError("invalid literal for int() with base 10: '[GPU access blocked by the operating system]'")
+            return {"foreign_pids": [], "unreadable": ["[N/A]"] if calls == 3 else []}
+
+    monkeypatch.setattr(process, "GpuGuard", Guard)
+    monkeypatch.setattr(process, "MAX_INCONCLUSIVE_SAMPLES", 3)
+    result = run_process([sys.executable, "-c", "import time; time.sleep(1.5)"], cwd=tmp_path,
+                         log=tmp_path / "ok.log", timeout=10, resources=Resources(poll_seconds=0.5), gpu_device=0)
+    assert result["status"] == "completed"
+    assert any("error" in sample for sample in result["resource_samples"])
+
+
+def test_persistent_guard_failures_still_report_a_resource_error(tmp_path, monkeypatch):
+    from kai_pichu import process
+
+    class Guard:
+        def __init__(self, device):
+            pass
+
+        def inspect(self, group=None):
+            raise ValueError("nvidia-smi unusable")
+
+    monkeypatch.setattr(process, "GpuGuard", Guard)
+    monkeypatch.setattr(process, "MAX_INCONCLUSIVE_SAMPLES", 2)
+    result = run_process([sys.executable, "-c", "import time; time.sleep(30)"], cwd=tmp_path,
+                         log=tmp_path / "bad.log", timeout=10, resources=Resources(poll_seconds=0.2), gpu_device=0)
+    # The device could not be inspected even before launch, so nothing was started.
+    assert result["status"] == "resource_error" and "nvidia-smi unusable" in result["message"]
+    assert not (tmp_path / "bad.log").exists()

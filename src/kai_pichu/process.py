@@ -12,6 +12,11 @@ from typing import Any
 
 from .config import Resources
 
+# nvidia-smi occasionally answers a process query with a bracketed placeholder
+# instead of a pid ("[N/A]", "[GPU access blocked by the operating system]" on
+# WSL). One such sample is inconclusive, not a conflict and not a failure; this
+# many in a row means the device really cannot be inspected.
+MAX_INCONCLUSIVE_SAMPLES = 5
 
 def _query(fields: str, *, apps: bool = False) -> list[list[str]]:
     flag = "--query-compute-apps=" if apps else "--query-gpu="
@@ -35,8 +40,12 @@ class GpuGuard:
     def inspect(self, group: int | None = None) -> dict[str, Any]:
         foreign = []
         own = []
+        unreadable = []
         for uuid, pid_text in _query("gpu_uuid,pid", apps=True):
             if uuid != self.uuid:
+                continue
+            if not pid_text.isdigit():
+                unreadable.append(pid_text)  # a placeholder row, not a process we can attribute
                 continue
             pid = int(pid_text)
             try:
@@ -46,8 +55,24 @@ class GpuGuard:
             except PermissionError:
                 ours = False
             (own if ours else foreign).append(pid)
-        return {"gpu_uuid": self.uuid, "foreign_pids": foreign, "own_pids": own,
+        return {"gpu_uuid": self.uuid, "foreign_pids": foreign, "own_pids": own, "unreadable": unreadable,
                 "monotonic_seconds": time.monotonic()}
+
+
+def _conclusive_sample(guard: GpuGuard) -> dict[str, Any]:
+    """One guard sample before launch, retrying placeholder answers a few times."""
+    for attempt in range(MAX_INCONCLUSIVE_SAMPLES):
+        try:
+            sample = guard.inspect()
+        except (OSError, ValueError, subprocess.SubprocessError):
+            if attempt == MAX_INCONCLUSIVE_SAMPLES - 1:
+                raise
+            time.sleep(0.2)
+            continue
+        if sample["foreign_pids"] or not sample.get("unreadable") or attempt == MAX_INCONCLUSIVE_SAMPLES - 1:
+            return sample
+        time.sleep(0.2)
+    raise ValueError("GPU guard produced no sample")
 
 
 def _terminate(process: subprocess.Popen) -> None:
@@ -80,7 +105,7 @@ def run_process(
     try:
         if gpu_device is not None and resources.gpu_policy == "exclusive":
             guard = GpuGuard(gpu_device)
-            samples.append(guard.inspect())
+            samples.append(_conclusive_sample(guard))
             if samples[-1]["foreign_pids"]:
                 return {"status": "resource_busy", "resource_samples": samples}
     except (OSError, ValueError, IndexError, subprocess.SubprocessError) as error:
@@ -92,6 +117,7 @@ def run_process(
         standard_output = stack.enter_context(stdout.open("xb")) if stdout is not None else output
         process = subprocess.Popen(argv, cwd=cwd, stdout=standard_output, stderr=output,
                                    env=env, start_new_session=True)
+        inconclusive = 0
         try:
             while process.poll() is None:
                 if time.monotonic() - started >= timeout:
@@ -105,24 +131,34 @@ def run_process(
                             status = "resource_busy"
                             _terminate(process)
                             break
+                        inconclusive = inconclusive + 1 if samples[-1].get("unreadable") else 0
                     except (OSError, ValueError, subprocess.SubprocessError) as error:
-                        status = "resource_error"
                         samples.append({"error": str(error)})
+                        inconclusive += 1
+                    if inconclusive >= MAX_INCONCLUSIVE_SAMPLES:
+                        status = "resource_error"
                         _terminate(process)
                         break
                 try:
                     process.wait(timeout=min(resources.poll_seconds, max(0.01, timeout - (time.monotonic() - started))))
                 except subprocess.TimeoutExpired:
                     pass
-            # Final sampling catches a workload appearing just before exit.
+            # Final sampling catches a workload appearing just before exit; a
+            # placeholder answer is retried a few times before it counts as a failure.
             if guard is not None and status == "completed":
-                try:
-                    samples.append(guard.inspect(process.pid))
-                    if samples[-1]["foreign_pids"]:
-                        status = "resource_busy"
-                except (OSError, ValueError, subprocess.SubprocessError) as error:
-                    status = "resource_error"
-                    samples.append({"error": str(error)})
+                for attempt in range(MAX_INCONCLUSIVE_SAMPLES):
+                    try:
+                        samples.append(guard.inspect(process.pid))
+                        if samples[-1]["foreign_pids"]:
+                            status = "resource_busy"
+                        if not samples[-1].get("unreadable") or status == "resource_busy":
+                            break
+                    except (OSError, ValueError, subprocess.SubprocessError) as error:
+                        samples.append({"error": str(error)})
+                    if attempt == MAX_INCONCLUSIVE_SAMPLES - 1:
+                        status = "resource_error"
+                    else:
+                        time.sleep(0.2)
         except BaseException:
             _terminate(process)
             raise
