@@ -19,6 +19,11 @@ kai-pichu benchmark guide            # the manual (or: python -m kai_pichu bench
 kai-pichu benchmark schema           # manifest JSON Schema
 ```
 
+This file ships inside the SDK; `kai-pichu skill install` is what copies it into
+an agent's skills directory, and `kai-pichu skill path` prints where it came
+from. Reinstall after upgrading the SDK so the instructions match the installed
+version.
+
 ## Workflow
 
 1. **Settle the contract with the user before writing code.** Confirm: operator

@@ -67,6 +67,12 @@ timing), `attention` (FP16 SDPA against PyTorch), `awq_linear_fusion` and
 `fusion` (`kind: fusion`). Output paths must be new; reports are never
 overwritten.
 
+`kai-pichu skill install [claude|codex|all] [--scope project|user]` copies the
+packaged `kai-benchmark` skill into a coding agent's skills directory, and
+`kai-pichu skill path` prints where it ships from. The skill follows this
+manual, so an agent authoring a task and a person reading this file work from
+the same rules.
+
 ## 3. Manifest reference
 
 | Field | Type, default | Meaning |
@@ -116,7 +122,7 @@ weight=1.0, work_units=None)`, `Observation(output, metrics={})`,
 | `load_implementation(workspace) -> handle` | Build or load exactly the files under the given root. Baseline and candidate roots differ; both may be loaded at once |
 | `run(handle, fixture) -> Observation` | One complete workload. Materialize outputs before returning. Adapter-owned metrics go in `Observation.metrics` |
 | `validate(case, fixture, observation) -> Validation` | Trusted oracle over outputs and required side effects. `errors` values must be finite numbers |
-| `invalid_observations(case, fixture, valid) -> Iterable[Observation]` | At least one wrong result per case that `validate` must reject: perturbed values, NaN, missing output, and the task's characteristic mistakes (wrong nibble order, dropped zero point, flipped kernel). Never mutate the live fixture or `valid` |
+| `invalid_observations(case, fixture, valid) -> Iterable[Observation]` | At least one wrong result per case that `validate` must reject: perturbed values, NaN, missing output, and the task's characteristic mistakes (wrong nibble order, dropped zero point, flipped kernel). The set may differ per case, and for some mistakes it must — see below. Never mutate the live fixture or `valid` |
 | `reset(handle, fixture)` | Restore state before every invocation, warmups included. Also the place to capture per-implementation CUDA graphs |
 | `synchronize(handle)` | Wait for asynchronous work. Required for `wall` timing of GPU code |
 | `cleanup_fixture(fixture)`, `cleanup_implementation(handle)` | Release memory, processes, libraries, also on failure |
@@ -129,6 +135,17 @@ restored. Then time: warm up every implementation on both fixtures, and run
 `blocks` blocks in ABBA/BAAB order with fixtures crossed between arms, `iterations`
 timed calls per position, reset before every call. A candidate is additionally
 checked untimed on every case before timing, and its `limits` on every raw call.
+
+**Probes that only some cases can catch.** A characteristic mistake is often
+undetectable over part of the input domain. Misplacing an `eps`-like guard term
+— `x / (sqrt(m) + eps)` instead of `x * rsqrt(m + eps)` — is invisible when `m`
+is order 1 and wrong by tens of percent when `m` approaches `eps`. Yielded
+unconditionally, such a probe is an invalid observation `validate` cannot
+reject, and the run fails on a correct task. `invalid_observations` receives the
+case and the fixture precisely so the set can depend on them: emit the probe
+only for the cases that expose it, and make sure at least one split case does.
+Narrowing a probe to the regime that reveals it is right; dropping it because
+some case cannot see it is not.
 
 **Metrics.** `latency_ms` is the SDK timer's interval; `throughput` is
 `work_units × 1000 / latency_ms` when `Case.work_units` is set. An adapter that
@@ -269,6 +286,12 @@ not widen a tolerance or remove a probe to make a command pass.
 SDK version and timing environment. `run` adds `candidate_checks`, raw
 `records`, `comparison` (overall and per-case speedup with intervals) and
 `acceptance` (`verdict`, `overall_speedup` with its interval, `case_speedups`, `case_regressions`, `metric_limit_failures`).
+
+`run` does **not** write `baseline_timing`: its absolute times live in
+`records`, one entry per timed invocation, tagged `arm: "a"` for the baseline
+and `arm: "b"` for the candidate. The report states that mapping in its `arms`
+field so it need not be inferred. Absolute baseline times on their own come
+from `validate --split <split>`.
 
 | Exit | Meaning |
 | --- | --- |

@@ -70,6 +70,19 @@ def test_benchmark_custom_metric_and_stateful_lifecycle(bundle):
     assert result["acceptance"]["accepted"]
     assert len(result["records"]) == 4 * 4 * 2
     assert result["baseline"]["implementation_fingerprint"] != result["candidate"]["implementation_fingerprint"]
+
+
+def test_run_report_names_its_arms(bundle):
+    """Absolute times live in records tagged a/b; the report says which is which.
+
+    run writes no baseline_timing, so without this mapping a reader has to infer
+    the baseline arm by comparing against a separate validate report.
+    """
+    manifest, candidate, _ = bundle
+    result = Runner(manifest).run(candidate)
+    assert result["arms"] == {"a": "baseline", "b": "candidate"}
+    assert {record["arm"] for record in result["records"]} == set(result["arms"])
+    assert "baseline_timing" not in result
     assert len(result["input_fingerprints"]) == 2
 
 

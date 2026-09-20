@@ -1,6 +1,6 @@
 schema_version: 1
 name: native_program
-description: Run a native executable that computes y=x*x+1, including process launch and input/output transfer.
+description: "Run a native executable that computes y=x*x+1, including process launch and input/output transfer."
 adapter: adapter.py:Task
 implementation:
   root: .

@@ -1,6 +1,6 @@
 schema_version: 1
 name: recurrent_state
-description: A fixed sequence of scalar recurrence updates, validating outputs and final state.
+description: "A fixed sequence of scalar recurrence updates, validating outputs and final state."
 adapter: adapter.py:Task
 implementation:
   root: .

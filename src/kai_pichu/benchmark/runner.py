@@ -272,6 +272,9 @@ class Runner:
             report["checks"] = self._check_cases(baseline, probes=True)
             report["candidate_checks"] = self._check_cases(implementation, probes=False)
             records = self._paired(baseline, implementation, candidate_limits=True)
+            # Records carry the arm they were measured in; say which is which so a
+            # reader does not have to infer it from a separate validate report.
+            report["arms"] = {"a": "baseline", "b": "candidate"}
             report["records"] = records
             report["comparison"] = self._summarize(records)
             report["acceptance"] = self._acceptance(report["comparison"])

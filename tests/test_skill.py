@@ -19,6 +19,11 @@ def test_skill_has_name_and_description_front_matter():
     assert header["name"] == SKILL_NAME
     assert "kind: fusion" in header["description"]
     assert "kai-pichu benchmark guide" in text
+    # The skill must say how it gets installed; readers of SKILL.md and MANUAL.md
+    # otherwise have no way to discover `kai-pichu skill install`.
+    assert "kai-pichu skill install" in text
+    manual = (Path(skill_source()).parents[1] / "benchmark" / "MANUAL.md").read_text(encoding="utf-8")
+    assert "kai-pichu skill install" in manual
 
 
 def test_skill_installs_for_both_agents_under_the_project_root(tmp_path, capsys):
@@ -28,6 +33,22 @@ def test_skill_installs_for_both_agents_under_the_project_root(tmp_path, capsys)
         assert installed.read_text() == (skill_source() / "SKILL.md").read_text()
         assert skill_destination(agent, scope="project", root=tmp_path) == installed.parent
     assert "Installed codex skill" in capsys.readouterr().out
+
+
+def test_skill_install_accepts_the_agent_as_a_positional(tmp_path, capsys):
+    """`skill install claude` is what the help text reads like; it used to fail."""
+    assert main(["skill", "install", "claude", "--directory", str(tmp_path)]) == 0
+    assert (tmp_path / ".claude" / "skills" / SKILL_NAME / "SKILL.md").exists()
+    assert not (tmp_path / ".codex").exists()
+    assert "Installed claude skill" in capsys.readouterr().out
+
+
+def test_skill_install_rejects_a_contradictory_agent(tmp_path, capsys):
+    # main() turns ValueError into exit 2 with the message on stderr; it does
+    # not propagate, so assert the CLI contract rather than the exception.
+    assert main(["skill", "install", "claude", "--agent", "codex", "--directory", str(tmp_path)]) == 2
+    assert "agent given twice" in capsys.readouterr().err
+    assert not (tmp_path / ".claude").exists()
 
 
 def test_skill_install_refuses_to_overwrite_without_force(tmp_path):
