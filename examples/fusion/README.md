@@ -65,6 +65,6 @@ A CUDA GPU with PyTorch and `nvcc` for `sm_120` (edit `options.cuda_arch` for
 another architecture). Preflight without model calls:
 
 ```bash
-python -m kai_core benchmark validate examples/fusion/benchmark.yaml \
+python -m kai_pichu benchmark validate examples/fusion/benchmark.yaml \
   --split search --checks-only --output fusion-checks.json
 ```

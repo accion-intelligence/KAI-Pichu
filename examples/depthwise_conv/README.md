@@ -32,8 +32,13 @@ per shape with `cudnnFindConvolutionForwardAlgorithmEx`.
 | Split | Cases (N × C × H × W) |
 | --- | --- |
 | smoke | 2×96×56×56 |
-| search | 8×256×56×56 standard normal; 4×512×28×28 post-ReLU sparse |
-| acceptance | 8×256×56×56 large range; 16×96×56×56 smooth feature maps; 4×192×57×61; 4×100×61×59 post-ReLU; 2×768×14×14 |
+| search | 16×96×56×56 large range; 4×512×28×28 post-ReLU sparse; 4×104×61×57 smooth feature maps; 2×768×14×14 standard normal |
+| acceptance | 8×256×56×56 large range; 12×160×56×56 smooth feature maps; 4×192×57×61 standard normal; 4×100×61×59 post-ReLU; 2×704×14×14 standard normal |
+
+Search and acceptance span the same ranges (N 2 to 16, C 96 to 768 with an
+unaligned count in each, spatial 14 to 61 with odd sizes in each, all four
+value profiles); search holds the extremes and acceptance samples the interior
+with different seeds.
 
 57×61 and 61×59 are odd: no tile size divides them and an image row of `W`
 halves is not 16-byte aligned, so vectorized loads along `W` need an alignment
@@ -60,6 +65,6 @@ for `sm_120` (edit `options.cuda_arch` for another architecture). Preflight
 without model calls:
 
 ```bash
-python -m kai_core benchmark validate examples/depthwise_conv/benchmark.yaml \
+python -m kai_pichu benchmark validate examples/depthwise_conv/benchmark.yaml \
   --split search --checks-only --output depthwise-checks.json
 ```

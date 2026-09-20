@@ -1,5 +1,5 @@
 [project]
-name = "kai-core"
+name = "kai-pichu"
 version = "0.1.0"
 description = "Single-operator GPU optimization with paired benchmarks and an agent optimization loop."
 readme = "README.md"
@@ -13,7 +13,7 @@ dev = ["pytest>=7"]
 anthropic = ["anthropic>=1"]
 
 [project.scripts]
-kai-core = "kai_core.cli:main"
+kai-pichu = "kai_pichu.cli:main"
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -23,9 +23,9 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"kai_core" = ["*.md"]
-"kai_core.benchmark" = ["*.md", "templates/**/*"]
-"kai_core.skills" = ["*/SKILL.md", "*/**/*"]
+"kai_pichu" = ["*.md"]
+"kai_pichu.benchmark" = ["*.md", "templates/**/*"]
+"kai_pichu.skills" = ["*/SKILL.md", "*/**/*"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["**/__pycache__/*", "**/*.pyc"]

@@ -167,7 +167,7 @@ class ModelClient:
         try:
             import anthropic
         except ImportError:
-            raise ValueError("provider anthropic needs the official SDK: pip install 'kai-core[anthropic]'") from None
+            raise ValueError("provider anthropic needs the official SDK: pip install 'kai-pichu[anthropic]'") from None
         config = self.config
         key = os.environ.get(config.api_key_env, "")
         if not key:

@@ -36,4 +36,4 @@ The optimizer limits generated edits to declared implementation files and checks
 
 Before/after fingerprints detect observable differences at the check points; they cannot guarantee detection of every transient mutation that is restored between checks. Process management is not OS-level isolation from malicious code. Use an execution environment appropriate to the trust you place in the task and generated implementation.
 
-Source: [benchmark API](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/api.py), [schema](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/models.py), [runner](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/runner.py).
+Source: [benchmark API](../src/kai_pichu/benchmark/api.py), [schema](../src/kai_pichu/benchmark/models.py), [runner](../src/kai_pichu/benchmark/runner.py).

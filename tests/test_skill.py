@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from kai_core.cli import main
-from kai_core.skills import SKILL_NAME, install_skill, skill_destination, skill_source
+from kai_pichu.cli import main
+from kai_pichu.skills import SKILL_NAME, install_skill, skill_destination, skill_source
 
 
 def front_matter(text: str) -> dict[str, str]:
@@ -18,7 +18,7 @@ def test_skill_has_name_and_description_front_matter():
     header = front_matter(text)
     assert header["name"] == SKILL_NAME
     assert "kind: fusion" in header["description"]
-    assert "kai-core benchmark guide" in text
+    assert "kai-pichu benchmark guide" in text
 
 
 def test_skill_installs_for_both_agents_under_the_project_root(tmp_path, capsys):

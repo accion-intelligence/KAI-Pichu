@@ -103,7 +103,7 @@ def reader_diagnostic(value: Any) -> Any:
         # creating a fictitious path by renaming a directory inside it.
         value = re.sub(r"""[^\s"'<>]*[/\\][^\s"'<>]*kai-ncu-reader[^\s"'<>]*|[^\s"'<>]*\.kai-ncu-reader[^\s"'<>]*""",
                        "[reader artifact]", value, flags=re.IGNORECASE)
-        value = re.sub("KAI_CORE_REPORT_READER_DIR", "profile.ncu_report_dir", value, flags=re.IGNORECASE)
+        value = re.sub("KAI_PICHU_REPORT_READER_DIR", "profile.ncu_report_dir", value, flags=re.IGNORECASE)
         return re.sub("kai-ncu-reader", "NCU report reader", value, flags=re.IGNORECASE)
     if isinstance(value, list):
         return [reader_diagnostic(item) for item in value]
@@ -125,7 +125,7 @@ class ProfileReport:
         self.identity = {**(identity or {}), "report_path": str(self.report), "input_sha256": self.inputs}
         self.binary = shutil.which(self.settings.report_reader or "kai-ncu-reader")
         self.backend = "ncu_report" if self.binary and self.report.is_file() else "csv"
-        self.cache = self.report.parent / (self.report.name + ".kai-core")
+        self.cache = self.report.parent / (self.report.name + ".kai-pichu")
         self.warnings: list[str] = []
         self.launches: list[dict[str, Any]] | None = None
         self.details: dict[str, dict[str, Any]] = {}
@@ -156,10 +156,10 @@ class ProfileReport:
         attempt = Path(tempfile.mkdtemp(prefix="query-", dir=self.cache))
         stdout = attempt / "stdout.json"
         env = dict(os.environ)
-        env["KAI_CORE_REPORT_READER_DIR"] = str(Path(__file__).parent / "ncu_compat")
-        env["KAI_CORE_NCU"] = self.settings.ncu
+        env["KAI_PICHU_REPORT_READER_DIR"] = str(Path(__file__).parent / "ncu_compat")
+        env["KAI_PICHU_NCU"] = self.settings.ncu
         if self.settings.ncu_report_dir:
-            env["KAI_CORE_NCU_REPORT_DIR"] = self.settings.ncu_report_dir
+            env["KAI_PICHU_NCU_REPORT_DIR"] = self.settings.ncu_report_dir
         result = run_process([self.binary, "ncu", verb, str(self.report), *args], cwd=self.report.parent,
                              log=attempt / "stderr.log", stdout=stdout, env=env,
                              timeout=self._remaining(), resources=Resources(), gpu_device=None)

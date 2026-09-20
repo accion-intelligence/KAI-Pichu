@@ -1,8 +1,8 @@
 # NCU report reader setup
 
-KAI Core calls an existing external NCU v1 report reader. The report parser,
+KAI Pichu calls an existing external NCU v1 report reader. The report parser,
 source attribution and full binary disassembly remain in that external program.
-KAI Core does not contain a replacement implementation.
+KAI Pichu does not contain a replacement implementation.
 
 The default command name is `kai-ncu-reader`. Set `profile.report_reader` or CLI
 `--report-reader` to select an existing compatible reader command or launcher.
@@ -16,9 +16,9 @@ python scripts/install_report_reader_alias.py /path/to/existing-reader \
 
 Replace the executable path and environment-variable placeholder with those of
 your existing reader installation. The launcher forwards all arguments unchanged.
-It maps `KAI_CORE_REPORT_READER_DIR` to the reader's existing environment variable,
+It maps `KAI_PICHU_REPORT_READER_DIR` to the reader's existing environment variable,
 so the packaged report API compatibility adapter continues to work. If the reader
-already accepts `KAI_CORE_REPORT_READER_DIR`, omit `--python-dir-env`.
+already accepts `KAI_PICHU_REPORT_READER_DIR`, omit `--python-dir-env`.
 The script creates `~/.local/bin/kai-ncu-reader`; add that directory to PATH.
 It does not overwrite an existing command. The external reader is not bundled.
 

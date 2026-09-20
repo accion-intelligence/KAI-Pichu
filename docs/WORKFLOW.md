@@ -6,7 +6,7 @@ The agent separates **writing a candidate**, **deciding what to change next**, a
 
 ## The task comes first
 
-The engineer defines the operator contract and supplies a runnable baseline, inputs, validator, objective, permitted source files, and measurement rules. Task authoring can be done by hand from the packaged manual, schema and templates, or by a coding agent through the packaged `kai-benchmark` skill (`kai-core skill install`). The optimizer itself consumes the resulting manifest and adapter.
+The engineer defines the operator contract and supplies a runnable baseline, inputs, validator, objective, permitted source files, and measurement rules. Task authoring can be done by hand from the packaged manual, schema and templates, or by a coding agent through the packaged `kai-benchmark` skill (`kai-pichu skill install`). The optimizer itself consumes the resulting manifest and adapter.
 
 A run freezes the task and baseline into its own workspace. Before generating CUDA, it executes the baseline checks on the search split and times the baseline. A failure here is a task or measurement problem, not evidence that generated code needs repair.
 
@@ -48,10 +48,10 @@ The engineer decides whether those results solve the intended problem and how to
 
 The diagram groups behavior for readability; it is not a deployment diagram or a security boundary.
 
-| Diagram / behavior | Source at the reviewed commit |
+| Diagram / behavior | Source in this repository |
 | --- | --- |
-| Generation, branching, best candidate, budgets, resume, acceptance | [OptimizationLoop](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/optimizer/engine.py) |
-| Repair diagnosis, performance strategy, on-demand profile questions | [Prompts and strategy contract](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/optimizer/prompts.py) |
-| Evaluation processes, feedback, capture and report queries | [Evaluator](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/evaluator.py) |
-| Input preparation, validation, baseline timing, paired measurement | [Benchmark runner](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/runner.py) |
-| Model, budget, resource and profiling configuration | [Configuration](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/config.py) |
+| Generation, branching, best candidate, budgets, resume, acceptance | [OptimizationLoop](../src/kai_pichu/optimizer/engine.py) |
+| Repair diagnosis, performance strategy, on-demand profile questions | [Prompts and strategy contract](../src/kai_pichu/optimizer/prompts.py) |
+| Evaluation processes, feedback, capture and report queries | [Evaluator](../src/kai_pichu/evaluator.py) |
+| Input preparation, validation, baseline timing, paired measurement | [Benchmark runner](../src/kai_pichu/benchmark/runner.py) |
+| Model, budget, resource and profiling configuration | [Configuration](../src/kai_pichu/config.py) |

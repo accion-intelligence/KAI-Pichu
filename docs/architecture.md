@@ -1,6 +1,6 @@
 # Architecture
 
-KAI Core separates operator semantics, measured evidence and optimization policy.
+KAI Pichu separates operator semantics, measured evidence and optimization policy.
 Only the benchmark owns the workload, oracle, tolerances, metric and acceptance.
 Only the optimization loop chooses what implementation to propose next.
 
@@ -33,11 +33,11 @@ evaluation. Profiling results never determine the speedup score.
 Captures retain both NCU reports and base-unit CSV. The optional NCU report adapter
 provides description search, rule findings and source/instruction queries;
 CSV supports a limited structured fallback. Report hashes bind cached queries
-to their original evidence. See the [AI profiling protocol](../src/kai_core/PROFILE_GUIDE.md).
+to their original evidence. See the [AI profiling protocol](../src/kai_pichu/PROFILE_GUIDE.md).
 
 ## Optimization loop
 
-`kai_core.optimizer` manages candidate generation, correctness repair, performance
+`kai_pichu.optimizer` manages candidate generation, correctness repair, performance
 diagnosis and selection. It consumes frozen benchmark contracts and structured SDK
 reports, and keeps candidate state separate from measurement and model transport.
 
@@ -73,7 +73,7 @@ constraints. A configured larger speedup target is checked during final acceptan
 The model interface accepts chat-completions-compatible HTTP services, the
 OpenAI Responses API (`provider: responses`, with `store: false`) and Claude
 through the official Anthropic SDK (`provider: anthropic`, optional dependency
-`kai-core[anthropic]`; adaptive thinking, no sampling parameters, refusals and
+`kai-pichu[anthropic]`; adaptive thinking, no sampling parameters, refusals and
 truncated answers reported as model errors, no fallback models).
 `provider: replay` supplies deterministic recorded text for offline control-flow
 tests. Replay output is not model performance evidence. SDK CPU/mocked CUDA tests

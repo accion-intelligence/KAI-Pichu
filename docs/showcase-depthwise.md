@@ -1,7 +1,8 @@
-# Showcase: 4.25× over cuDNN on depthwise 7×7 convolution
+# Showcase: depthwise 7×7 convolution against cuDNN
 
-$1 of API calls, about 2 hours, one packaged task, no target speedup. This page
-records how the run went; the [README](../README.md#showcase-1-2-hours-425-over-cudnn)
+$1 of API calls, about 2 hours, one packaged task, no target speedup: 4.25× over
+cuDNN on the search cases, 3.85× and 3.54× geometric mean on two held-out
+acceptance reruns. This page records how the run went; the [README](../README.md#showcase-1-2-hours-35-to-39-over-cudnn-on-held-out-shapes)
 has the headline.
 
 Large-kernel depthwise convolution is the slow stage of ConvNeXt-style backbones
@@ -20,7 +21,9 @@ let it run for 13 rounds.
 
 NVIDIA GeForce RTX 5070, CUDA 12.9, PyTorch 2.8 with cuDNN 9.10. Generator and
 judge: `gpt-5.6-luna` through the OpenAI Responses API at reasoning effort
-`xhigh`. Budget: 13 rounds, no `target_speedup`; NCU profiling on with up to
+`xhigh`. The search split at the time had two cases, 8×256×56×56 and
+4×512×28×28, so several held-out shapes below lay outside it; the packaged
+example's search split now spans the acceptance ranges. Budget: 13 rounds, no `target_speedup`; NCU profiling on with up to
 four evidence queries per diagnosis. 72 model calls, 1.4M input and 0.4M output
 tokens, about 1.7 hours of loop time, about $1 as billed.
 

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import shlex
 
-from kai_core.cli import main
+from kai_pichu.cli import main
 
 
 def run() -> int:

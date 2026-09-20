@@ -1,14 +1,14 @@
 # Benchmark SDK quickstart
 
-The complete reference is the manual: `kai-core benchmark guide` or [MANUAL.md](../src/kai_core/benchmark/MANUAL.md). This page is the short command tour.
+The complete reference is the manual: `kai-pichu benchmark guide` or [MANUAL.md](../src/kai_pichu/benchmark/MANUAL.md). This page is the short command tour.
 
 Use Python 3.10+ in your project's existing environment:
 
 ```bash
 python -m pip install -e .
-python -m kai_core benchmark --help
-python -m kai_core benchmark schema --output /tmp/kai-benchmark-schema.json
-python -m kai_core benchmark guide --output /tmp/KAI_BENCHMARK_INTEGRATION.md
+python -m kai_pichu benchmark --help
+python -m kai_pichu benchmark schema --output /tmp/kai-benchmark-schema.json
+python -m kai_pichu benchmark guide --output /tmp/KAI_BENCHMARK_INTEGRATION.md
 ```
 
 Give the generated guide to your coding agent, together with your project
@@ -18,8 +18,8 @@ PyYAML. It does not install PyTorch, CUDA, vLLM, models, or profiler tools.
 ## Start from an example
 
 ```bash
-python -m kai_core benchmark init /tmp/my-benchmark --template stateful
-python -m kai_core benchmark validate /tmp/my-benchmark/benchmark.yaml \
+python -m kai_pichu benchmark init /tmp/my-benchmark --template stateful
+python -m kai_pichu benchmark validate /tmp/my-benchmark/benchmark.yaml \
   --checks-only --output /tmp/my-checks.json
 ```
 
@@ -36,11 +36,11 @@ state reset. `--checks-only` verifies wiring but explicitly leaves `ready=false`
 ## Validate and compare
 
 ```bash
-python -m kai_core benchmark validate /tmp/my-benchmark/benchmark.yaml \
+python -m kai_pichu benchmark validate /tmp/my-benchmark/benchmark.yaml \
   --split search --output /tmp/my-preflight.json
 
 # The candidate root contains the files listed in implementation.files.
-python -m kai_core benchmark run /tmp/my-benchmark/benchmark.yaml \
+python -m kai_pichu benchmark run /tmp/my-benchmark/benchmark.yaml \
   --candidate /path/to/candidate --split search --output /tmp/my-comparison.json
 ```
 
@@ -91,4 +91,4 @@ and boundaries. `latency_ms` and `throughput` are reserved SDK metrics.
 
 For lifecycle details, limitations and statistical definitions, see the
 [framework contract](benchmark-framework.md). Pass the finished manifest to
-`kai-core optimize` to run the optimization loop.
+`kai-pichu optimize` to run the optimization loop.

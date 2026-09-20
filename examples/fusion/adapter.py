@@ -1,4 +1,4 @@
-"""Adapt the epilogue fusion task to the KAI Core benchmark SDK."""
+"""Adapt the epilogue fusion task to the KAI Pichu benchmark SDK."""
 from __future__ import annotations
 
 import ctypes
@@ -11,7 +11,7 @@ from typing import Any, Iterable
 import torch
 from torch.utils.cpp_extension import include_paths, library_paths
 
-from kai_core.benchmark import (
+from kai_pichu.benchmark import (
     Benchmark, Case, Observation, Validation, fixture_fingerprint, load_python_file,
 )
 

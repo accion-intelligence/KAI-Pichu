@@ -11,16 +11,16 @@ import sys
 import pytest
 import yaml
 
-from kai_core.benchmark import Case, Observation, Validation
-from kai_core.benchmark.cli import main
-from kai_core.benchmark.loading import file_inventory, load_python_file
-from kai_core.benchmark.models import BenchmarkSpec, finite_number
-from kai_core.benchmark.runner import BenchmarkError, Runner
-from kai_core.benchmark.statistics import summarize
+from kai_pichu.benchmark import Case, Observation, Validation
+from kai_pichu.benchmark.cli import main
+from kai_pichu.benchmark.loading import file_inventory, load_python_file
+from kai_pichu.benchmark.models import BenchmarkSpec, finite_number
+from kai_pichu.benchmark.runner import BenchmarkError, Runner
+from kai_pichu.benchmark.statistics import summarize
 
 
 ADAPTER = '''
-from kai_core.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
+from kai_pichu.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
 class Task(Benchmark):
     def cases(self, split):
         return [Case(id="one", params={"x": 3}), Case(id="two", params={"x": 7}, weight=2)]
@@ -354,7 +354,7 @@ def test_benchmark_manual_is_shipped_and_exportable(tmp_path):
 
 def test_benchmark_report_write_is_exclusive(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
-    from kai_core.benchmark.cli import _write_new
+    from kai_pichu.benchmark.cli import _write_new
 
     path = tmp_path / "report.json"
 
@@ -380,7 +380,7 @@ def test_benchmark_cli_reports_failures(bundle, tmp_path):
 
 
 def test_benchmark_cli_run_uses_structured_contract(bundle, tmp_path):
-    from kai_core.cli import main as kai_main
+    from kai_pichu.cli import main as kai_main
 
     output = tmp_path / "report.json"
     assert kai_main(["benchmark", "run", str(bundle[0]), "--candidate", str(bundle[1]),
@@ -405,20 +405,20 @@ def test_benchmark_shipped_templates_pass_conformance(template, tmp_path):
 def test_benchmark_entrypoint_help_does_not_import_optimization_agents():
     code = """
 import sys
-from kai_core.cli import main
+from kai_pichu.cli import main
 try:
     main(['benchmark', '--help'])
 except SystemExit as error:
     assert error.code == 0
-assert 'kai_core.agentic_workflow' not in sys.modules
+assert 'kai_pichu.agentic_workflow' not in sys.modules
 assert 'torch' not in sys.modules
 """
     subprocess.run([sys.executable, "-c", code], check=True, capture_output=True, text=True)
 
 
 def test_benchmark_wall_timer_waits_for_completion(monkeypatch):
-    from kai_core.benchmark.models import Measurement
-    from kai_core.benchmark.timing import Timer
+    from kai_pichu.benchmark.models import Measurement
+    from kai_pichu.benchmark.timing import Timer
 
     events = []
     ticks = iter([1000000, 3000000])
@@ -427,7 +427,7 @@ def test_benchmark_wall_timer_waits_for_completion(monkeypatch):
         events.append("clock")
         return next(ticks)
 
-    monkeypatch.setattr("kai_core.benchmark.timing.time.perf_counter_ns", clock)
+    monkeypatch.setattr("kai_pichu.benchmark.timing.time.perf_counter_ns", clock)
     timer = Timer(Measurement(boundary="test", cache_policy="test"))
 
     def call():
@@ -444,8 +444,8 @@ def test_benchmark_cuda_timer_uses_configured_device_and_stream_events(monkeypat
     from contextlib import nullcontext
     from types import SimpleNamespace
 
-    from kai_core.benchmark.models import Measurement
-    from kai_core.benchmark.timing import Timer
+    from kai_pichu.benchmark.models import Measurement
+    from kai_pichu.benchmark.timing import Timer
 
     events = []
 
@@ -488,8 +488,8 @@ def test_benchmark_cuda_timing_defers_automatic_gc_and_restores_state(enabled, f
     import gc
     from types import SimpleNamespace
 
-    from kai_core.benchmark.models import Measurement
-    from kai_core.benchmark.timing import Timer
+    from kai_pichu.benchmark.models import Measurement
+    from kai_pichu.benchmark.timing import Timer
 
     class Event:
         def record(self):
@@ -527,8 +527,8 @@ def test_benchmark_cuda_timing_defers_automatic_gc_and_restores_state(enabled, f
 def test_benchmark_wall_timing_retains_workload_gc_policy():
     import gc
 
-    from kai_core.benchmark.models import Measurement
-    from kai_core.benchmark.timing import Timer
+    from kai_pichu.benchmark.models import Measurement
+    from kai_pichu.benchmark.timing import Timer
 
     timer = Timer(Measurement(timer="wall", boundary="application", cache_policy="test"))
     before = gc.isenabled()
@@ -541,7 +541,7 @@ def test_benchmark_wall_timing_retains_workload_gc_policy():
 
 
 def test_default_fixture_fingerprint_distinguishes_content_type_and_layout(tmp_path):
-    from kai_core.benchmark import fixture_fingerprint
+    from kai_pichu.benchmark import fixture_fingerprint
     assert fixture_fingerprint({"a": 1, "b": [1, 2]}) == fixture_fingerprint({"b": [1, 2], "a": 1})
     assert fixture_fingerprint([1, 2]) != fixture_fingerprint([2, 1])
     assert len({fixture_fingerprint(v) for v in (1, 1.0, True, "1", b"1", None)}) == 6
@@ -554,7 +554,7 @@ def test_default_fixture_fingerprint_distinguishes_content_type_and_layout(tmp_p
 
 
 def test_default_fixture_fingerprint_names_unsupported_objects_and_accepts_hooks():
-    from kai_core.benchmark import UnsupportedFixtureValue, fixture_fingerprint
+    from kai_pichu.benchmark import UnsupportedFixtureValue, fixture_fingerprint
 
     class Opaque:
         pass
@@ -570,7 +570,7 @@ def test_default_fixture_fingerprint_names_unsupported_objects_and_accepts_hooks
 
 def test_default_fixture_fingerprint_covers_tensor_values_shape_and_stride():
     torch = pytest.importorskip("torch")
-    from kai_core.benchmark import fixture_fingerprint
+    from kai_pichu.benchmark import fixture_fingerprint
     a = torch.arange(6, dtype=torch.float32)
     assert fixture_fingerprint(a) == fixture_fingerprint(a.clone())
     assert fixture_fingerprint(a) != fixture_fingerprint(a.view(2, 3))
@@ -582,7 +582,7 @@ def test_default_fixture_fingerprint_covers_tensor_values_shape_and_stride():
 
 def test_manifest_rejects_adapter_in_agent_files():
     from pydantic import ValidationError
-    from kai_core.benchmark.models import BenchmarkSpec
+    from kai_pichu.benchmark.models import BenchmarkSpec
     base = {"name": "t", "description": "d", "adapter": "adapter.py:Task",
             "implementation": {"files": ["solution.py"]},
             "objective": {"scope": "kernel", "unit": "ms"},
@@ -594,7 +594,7 @@ def test_manifest_rejects_adapter_in_agent_files():
 
 
 def fusion_spec(**overrides):
-    from kai_core.benchmark.models import BenchmarkSpec
+    from kai_pichu.benchmark.models import BenchmarkSpec
     base = {"name": "epilogue", "description": "d", "kind": "fusion", "adapter": "adapter.py:Task",
             "implementation": {"files": ["solution.cu"]},
             "fusion": {"kernels": [{"name": "bias", "files": ["kernels/bias.cu"], "entry": "launch_bias", "description": "adds bias"},

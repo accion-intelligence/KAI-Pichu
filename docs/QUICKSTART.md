@@ -2,7 +2,7 @@
 
 [← README](../README.md)
 
-This guide matches source commit `f7047172a5078ef43de6d915185d86ed21707fb5`. The product is KAI Pichu; the current Python module remains `kai_core`. Run commands from a source checkout. This document set does not contain the executable source.
+This guide describes the code in this repository. Run the commands from a source checkout after `python -m pip install -e .`; the CLI is `kai-pichu`, and `python -m kai_pichu` is equivalent.
 
 ## 1. Prepare the environment
 
@@ -14,7 +14,7 @@ In an activated Python environment, from the repository root:
 
 ```bash
 python -m pip install -e .
-python -m kai_core --help
+python -m kai_pichu --help
 ```
 
 Core runtime dependencies are Pydantic 2 and PyYAML. Installation, exported guides, schema, and dry-run do not require model calls. GPU workload checks do require the corresponding GPU environment.
@@ -23,53 +23,40 @@ Core runtime dependencies are Pydantic 2 and PyYAML. Installation, exported guid
 
 A task consists of a **manifest** (semantics, objective, files, measurement settings) and an **adapter** (input preparation, implementation loading, execution, correctness checks). The benchmark is the executable contract for your operator, not a required public leaderboard.
 
-Export the machine-readable schema and authoring instructions:
-
 With a coding agent (Claude Code or Codex), install the packaged skill and describe your operator:
 
 ```bash
-python -m kai_core skill install            # ./.claude/skills and ./.codex/skills; add --scope user for your home directory
+python -m kai_pichu skill install            # ./.claude/skills and ./.codex/skills; add --scope user for your home directory
 ```
 
 The skill follows the benchmark manual shipped with the SDK. You decide the input domain, output semantics, baseline, tolerances, timed boundary, and editable files; the agent asks when it cannot establish them and shows you the contract for review before optimization. To read the manual yourself:
 
 ```bash
-python -m kai_core benchmark guide --output task-manual.md
-python -m kai_core benchmark schema --output task-schema.json
+python -m kai_pichu benchmark guide --output task-manual.md
+python -m kai_pichu benchmark schema --output task-schema.json
 ```
 
 To scaffold the adapter yourself, choose a suitable template and a new directory:
 
 ```bash
-python -m kai_core benchmark init /absolute/path/to/your-task --template stateless
+python -m kai_pichu benchmark init /absolute/path/to/your-task --template stateless
 ```
 
 Available templates: `stateless`, `stateful`, and `command` (external-command workloads, including native implementations). Replace the template workload and validator with your task. A template is a starting structure, not a validator for an arbitrary new operator.
 
-Important API contracts:
-
-- `cases(split)` supplies the cases for `smoke`, `search`, or `acceptance`.
-- `prepare(case, seed)` creates a reproducible fixture. The SDK digests it automatically; override `fingerprint(fixture)` only to exclude scratch or output buffers.
-- `agent_files` in the manifest lists the interface and description files the optimization agent may read. The adapter, the reference and input generation are never shown to the agent.
-- `load_implementation(workspace)` loads the baseline or candidate implementation.
-- `run(implementation, fixture)` returns an `Observation`.
-- `validate(case, fixture, observation)` returns a `Validation`.
-- `invalid_observations(case, fixture, valid)` supplies invalid observations the validator must reject.
-- `reset(...)` and `synchronize(...)` define repeatable execution and completion where required.
-
-Use the manual and [actual API](https://github.com/accion-intelligence/KAI-Core/blob/f7047172a5078ef43de6d915185d86ed21707fb5/src/kai_core/benchmark/api.py) for full signatures. Measurement fields live under `measurement`; the SDK timer options are `wall` and `cuda_event`. Example-specific metric implementations are not additional SDK timer options.
+The adapter protocol (`cases`, `prepare`, `load_implementation`, `run`, `validate`, `invalid_observations`, `reset`, `synchronize`, the optional `fingerprint`) and every manifest field are specified in the manual; [`api.py`](../src/kai_pichu/benchmark/api.py) has the signatures. The SDK timer options are `wall` and `cuda_event`; example-specific metric implementations are not additional SDK timers.
 
 Check conformance before making model calls:
 
 ```bash
-python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml \
+python -m kai_pichu benchmark validate /absolute/path/to/your-task/benchmark.yaml \
   --checks-only --output task-checks.json
 ```
 
 This executes the task’s checks, which may require a GPU, without timing. For a complete baseline preflight on the search cases, which also times the baseline:
 
 ```bash
-python -m kai_core benchmark validate /absolute/path/to/your-task/benchmark.yaml \
+python -m kai_pichu benchmark validate /absolute/path/to/your-task/benchmark.yaml \
   --split search --output task-preflight.json
 ```
 
@@ -78,14 +65,14 @@ The optimizer also runs a preflight before its first generation call. Use new re
 ## 3. Choose the models and budget
 
 ```bash
-python -m kai_core config --output optimizer.yaml
+python -m kai_pichu config --output optimizer.yaml
 ```
 
 Edit the exported file:
 
 | Setting | What to choose |
 | --- | --- |
-| `generator.provider` | `chat_completions` or `responses` for OpenAI-shaped endpoints; `anthropic` for Claude via the official SDK (`pip install 'kai-core[anthropic]'`, see `configs/claude_opus5_smoke.yaml`) |
+| `generator.provider` | `chat_completions` or `responses` for OpenAI-shaped endpoints; `anthropic` for Claude via the official SDK (`pip install 'kai-pichu[anthropic]'`, see `configs/claude_opus5_smoke.yaml`) |
 | `generator.model`, `generator.base_url` | Your model identifier and compatible API base URL |
 | `generator.api_key_env` | The name of the environment variable holding your key |
 | `judge` | Optional separate model configuration; omit to reuse the generator model |
@@ -94,7 +81,7 @@ Edit the exported file:
 | `profile.enabled` | Set `true` to collect NCU evidence when your environment supports it |
 | `profile.case_id` | Pin the search case NCU captures; by default it follows the case with the lowest measured speedup |
 
-The exported default key-variable name is `KAI_CORE_API_KEY`. Set it securely in your environment, or change `api_key_env` to an existing key-variable name. For a local endpoint that needs no authentication, set `api_key_env: ""`. Do not place secrets in the task or commit them to source control.
+The exported default key-variable name is `KAI_PICHU_API_KEY`. Set it securely in your environment, or change `api_key_env` to an existing key-variable name. For a local endpoint that needs no authentication, set `api_key_env: ""`. Do not place secrets in the task or commit them to source control.
 
 Alternatively, from the source checkout, use the bundled launcher to load the key from a dotenv file and select a physical GPU by UUID. With your configured `optimizer.yaml` and a new output directory:
 
@@ -108,27 +95,25 @@ Generation and judge calls send task context and implementation source to your c
 
 The tool uses your compute and model account. Round/call/time limits bound the workflow; they are not a dollar-denominated billing guarantee. NCU diagnostic queries also consume judge calls. Leave sufficient time for final acceptance.
 
-## 4. Inspect the plan, then run
+## 4. Run
 
-Optional dry-run, using a new output directory:
+Start the loop against your reviewed task, with a new output directory:
 
 ```bash
-python -m kai_core optimize /absolute/path/to/your-task/benchmark.yaml \
-  --config optimizer.yaml --output runs/my-operator --dry-run
+python -m kai_pichu optimize /absolute/path/to/your-task/benchmark.yaml \
+  --config optimizer.yaml --output runs/my-operator
 ```
 
-Inspect `plan.json` and the frozen task bundle. Dry-run makes no model calls and does not execute the GPU workload; it does not prove that the task compiles or passes validation.
+The loop freezes the task and baseline into the run directory, runs the search preflight on the GPU, and makes its first model call only after the baseline passes. It prints a status line at the end; `summary.json` holds the result.
 
-To execute that planned run, use the same configuration and directory:
+An interrupted run resumes with the same command plus `--resume`. Only the `budget` section (rounds, model calls, seconds) may differ from the original configuration; such changes are recorded in `state.json` and `summary.json`. Reserved calls and interrupted rounds remain charged to the budget, and completed runs cannot be resumed: start a new run to change the task or configuration.
 
 ```bash
-python -m kai_core optimize /absolute/path/to/your-task/benchmark.yaml \
+python -m kai_pichu optimize /absolute/path/to/your-task/benchmark.yaml \
   --config optimizer.yaml --output runs/my-operator --resume
 ```
 
-Or skip dry-run and start a fresh run with the same command **without** `--resume`, using a new output directory.
-
-An interrupted run can resume with the original configuration; only the `budget` section (rounds, model calls, seconds) may differ, and such changes are recorded in `state.json` and `summary.json`. Reserved calls and interrupted rounds remain charged to the budget; the loop does not replay unknown calls. Completed runs cannot be resumed. Start a new run to change the task or configuration.
+To inspect the plan and the frozen task bundle without model calls or GPU work, add `--dry-run` (new output directory). It writes `plan.json` and the bundle; it does not prove that the task compiles or passes validation. A dry-run directory can then be executed with `--resume`.
 
 ## 5. Inspect the work
 
@@ -149,9 +134,9 @@ An interrupted run can resume with the original configuration; only the `budget`
 ## Optional: inspect NCU evidence directly
 
 ```bash
-python -m kai_core profile --guide
-python -m kai_core profile --dependencies
-python -m kai_core profile --schema
+python -m kai_pichu profile --guide
+python -m kai_pichu profile --dependencies
+python -m kai_pichu profile --schema
 ```
 
 NCU capture and the optional report-reader integration are distinct. Structured CSV evidence remains available without the reader; richer rules and source-level queries depend on installed capabilities. Querying a saved report cannot recover counters that were not captured.

@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from typing import Any, Iterable
 
-from kai_core.benchmark import Benchmark, Case, Observation, Validation
+from kai_pichu.benchmark import Benchmark, Case, Observation, Validation
 
 
 class Task(Benchmark):

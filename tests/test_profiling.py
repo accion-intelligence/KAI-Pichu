@@ -5,13 +5,13 @@ import sys
 
 import pytest
 
-from kai_core import profiling
-from kai_core.cli import main
-from kai_core.config import ProfileConfig, Resources
-from kai_core.process import run_process
-from kai_core.profile_csv import read_csv
-from kai_core.profiling import ProfileReport
-from kai_core.optimizer.prompts import OPTIMIZATION_JUDGE, messages
+from kai_pichu import profiling
+from kai_pichu.cli import main
+from kai_pichu.config import ProfileConfig, Resources
+from kai_pichu.process import run_process
+from kai_pichu.profile_csv import read_csv
+from kai_pichu.profiling import ProfileReport
+from kai_pichu.optimizer.prompts import OPTIMIZATION_JUDGE, messages
 
 
 @pytest.fixture
@@ -365,7 +365,7 @@ def test_reader_failure_uses_generic_prompt_diagnostics_but_keeps_raw_artifacts(
         assert report.query({"operation": "catalog"})["status"] == "available"
     def execute(*args, **kwargs):
         kwargs["stdout"].write_text(json.dumps({"error": {"code": "ncu.input.missing",
-            "message": "kai-ncu-reader: cache /tmp/report.ncu-rep.kai-ncu-reader/cache unavailable; set KAI_CORE_REPORT_READER_DIR"}}))
+            "message": "kai-ncu-reader: cache /tmp/report.ncu-rep.kai-ncu-reader/cache unavailable; set KAI_PICHU_REPORT_READER_DIR"}}))
         return {"status": "completed", "returncode": 1}
     monkeypatch.setattr(profiling, "run_process", execute)
     result = report.query({"operation": operation})

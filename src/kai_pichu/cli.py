@@ -13,7 +13,7 @@ def main(argv: list[str] | None = None) -> int:
     if argv and argv[0] == "benchmark":
         from .benchmark.cli import main as benchmark_main
         return benchmark_main(argv[1:])
-    parser = argparse.ArgumentParser(prog="kai-core", description="Single-operator GPU optimization with the Benchmark SDK and optimization loop.")
+    parser = argparse.ArgumentParser(prog="kai-pichu", description="Single-operator GPU optimization with the Benchmark SDK and optimization loop.")
     commands = parser.add_subparsers(dest="command", required=True)
     optimize = commands.add_parser("optimize", help="Optimize a frozen benchmark task")
     optimize.add_argument("manifest", type=Path)

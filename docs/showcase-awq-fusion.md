@@ -2,7 +2,7 @@
 
 One `kind: fusion` task, `gpt-5.6-luna` as generator and judge, 20 rounds, no
 target speedup. This page records how the run went; the
-[README](../README.md#showcase-9-on-awq-int4-decode-a-fusion-task) has the
+[README](../README.md#showcase-awq-int4-decode-fusion-45-geometric-mean-up-to-9-per-shape) has the
 headline.
 
 AutoAWQ serves 4-bit LLM weights by running its `dequantize_weights` kernel

@@ -28,7 +28,7 @@ def test_alias_preserves_existing_reader_argv_environment_and_exit_code(tmp_path
     alias = alias_installer(str(reader), tmp_path / "kai-ncu-reader", python_dir_env="READER_API_DIR")
     args = ["ncu", "disasm", "capture with spaces.ncu-rep", "--row-id", "launch:0", "literal;$HOME"]
     result = subprocess.run([str(alias), *args], capture_output=True, text=True,
-                            env={**os.environ, "KAI_CORE_REPORT_READER_DIR": "/api path/with spaces"})
+                            env={**os.environ, "KAI_PICHU_REPORT_READER_DIR": "/api path/with spaces"})
     assert result.returncode == 7
     assert json.loads(result.stdout) == {"argv": args, "directory": "/api path/with spaces"}
 

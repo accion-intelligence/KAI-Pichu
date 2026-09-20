@@ -5,7 +5,7 @@ declares the contract and an **adapter** (`adapter.py`) that prepares inputs,
 loads implementations, runs one workload and checks the result. This manual is
 the complete reference for writing one, for a developer at a keyboard and for a
 coding agent alike. Everything the SDK enforces is stated here; the exported
-JSON Schema (`kai-core benchmark schema`) is authoritative for field types.
+JSON Schema (`kai-pichu benchmark schema`) is authoritative for field types.
 
 ```
 my-task/
@@ -50,15 +50,15 @@ distribution or a target speedup to finish sooner.
 ## 2. Commands
 
 ```bash
-kai-core benchmark init  /abs/path/new-task --template stateless   # scaffold
-kai-core benchmark schema --output task-schema.json               # manifest schema
-kai-core benchmark guide  --output task-manual.md                 # this manual
-kai-core benchmark validate benchmark.yaml --split smoke --checks-only --output checks.json
-kai-core benchmark validate benchmark.yaml --split search --output preflight.json
-kai-core benchmark run benchmark.yaml --candidate /abs/path/candidate --split search --output compare.json
+kai-pichu benchmark init  /abs/path/new-task --template stateless   # scaffold
+kai-pichu benchmark schema --output task-schema.json               # manifest schema
+kai-pichu benchmark guide  --output task-manual.md                 # this manual
+kai-pichu benchmark validate benchmark.yaml --split smoke --checks-only --output checks.json
+kai-pichu benchmark validate benchmark.yaml --split search --output preflight.json
+kai-pichu benchmark run benchmark.yaml --candidate /abs/path/candidate --split search --output compare.json
 ```
 
-`python -m kai_core benchmark …` is equivalent. Templates: `stateless` (a
+`python -m kai_pichu benchmark …` is equivalent. Templates: `stateless` (a
 PyTorch or Python operator), `stateful` (a resettable multi-step workload),
 `command` (an external C++/CUDA program driven as a subprocess). The templates
 run on CPU and teach the protocol; the packaged GPU examples under `examples/`
@@ -104,7 +104,7 @@ fingerprinted with the run; any change during a run invalidates it.
 
 ## 4. Adapter reference
 
-Subclass `kai_core.benchmark.Benchmark`. Public types: `Case(id, params,
+Subclass `kai_pichu.benchmark.Benchmark`. Public types: `Case(id, params,
 weight=1.0, work_units=None)`, `Observation(output, metrics={})`,
 `Validation(passed, message="", errors={})`.
 
@@ -280,9 +280,9 @@ A completed comparison with `accepted: false` is a valid result, not a defect.
 ## 11. Hand-off to the optimizer
 
 ```bash
-kai-core config --output optimizer.yaml      # model, endpoint, key variable, budget, NCU
-kai-core optimize /abs/path/my-task/benchmark.yaml --config optimizer.yaml --output runs/my-task
-kai-core optimize … --resume                 # continue an interrupted run; only the budget may change
+kai-pichu config --output optimizer.yaml      # model, endpoint, key variable, budget, NCU
+kai-pichu optimize /abs/path/my-task/benchmark.yaml --config optimizer.yaml --output runs/my-task
+kai-pichu optimize … --resume                 # continue an interrupted run; only the budget may change
 ```
 
 The optimizer freezes the task bundle, runs the search preflight, then each
@@ -306,4 +306,4 @@ weights is a new task version and a new run.
 - [ ] Tolerance justified by the baseline's measured error with margin; a degraded implementation fails.
 - [ ] `validate --checks-only` on all three splits and full `validate --split search` pass; `baseline_timing` reviewed.
 - [ ] A short README for humans: what the task is, where the numbers come from, requirements, the preflight command.
-- [ ] Contract shown to the user for review before `kai-core optimize`.
+- [ ] Contract shown to the user for review before `kai-pichu optimize`.

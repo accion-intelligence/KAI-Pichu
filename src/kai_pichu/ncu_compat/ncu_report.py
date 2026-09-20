@@ -15,13 +15,13 @@ import sys
 
 
 def _find_report_dir() -> Path:
-    configured = os.environ.get("KAI_CORE_NCU_REPORT_DIR")
+    configured = os.environ.get("KAI_PICHU_NCU_REPORT_DIR")
     if configured:
         directory = Path(configured).expanduser().resolve()
         if not (directory / "ncu_report.py").is_file():
             raise ImportError("profile.ncu_report_dir does not contain ncu_report.py")
         return directory
-    binary = shutil.which(os.environ.get("KAI_CORE_NCU", "ncu"))
+    binary = shutil.which(os.environ.get("KAI_PICHU_NCU", "ncu"))
     if binary:
         root = Path(binary).resolve().parent
         for parent in (root, root.parent):
@@ -42,7 +42,7 @@ def _find_report_dir() -> Path:
 
 _directory = _find_report_dir()
 sys.path.append(str(_directory))
-_spec = importlib.util.spec_from_file_location("_kai_core_ncu_report", _directory / "ncu_report.py")
+_spec = importlib.util.spec_from_file_location("_kai_pichu_ncu_report", _directory / "ncu_report.py")
 if _spec is None or _spec.loader is None:
     raise ImportError("cannot load NVIDIA ncu_report module")
 _native = importlib.util.module_from_spec(_spec)

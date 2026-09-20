@@ -12,5 +12,5 @@
     "utils/kernel_io.py": "181275690b9299f919d71d770a051322165b526cc4f146fd28bf2622706dd12b",
     "run_ncu.py": "d36dfefd6137affdb352b6f5049a5e28bd7e2ada337bf65deddfba4c12255916"
   },
-  "integration": "Modified source port of the single-task generation/repair/optimization loop, individual state and judge strategy. Benchmark, process, workspace, transport and profiler boundaries replaced with KAI Core interfaces."
+  "integration": "Modified source port of the single-task generation/repair/optimization loop, individual state and judge strategy. Benchmark, process, workspace, transport and profiler boundaries replaced with KAI Pichu interfaces."
 }

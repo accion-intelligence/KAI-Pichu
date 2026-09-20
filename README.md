@@ -4,17 +4,17 @@
 
 [Get started](#get-started) · [How it works](#how-it-works) · [Define a task with your coding agent](#define-a-task-with-your-coding-agent) · [Documentation](#documentation) · [Research](#research-and-attribution)
 
-At Accion Intelligence, we’re building KAI to make GPU engineering accessible from a specification. **KAI Pichu is the open-source agent harness underneath it:** a Benchmark SDK that turns an operator contract into a task no model can game, an optimization loop that drives any LLM you choose through generate, measure, profile and repair, and a run record you can audit line by line. It optimizes one GPU operator, or fuses one kernel pipeline, at a time. It is the first of three tiers: **KAI Pichu** (open, single operator), **KAI Pikachu** (open, end to end) and **KAI Raichu** (managed). The Python package and CLI are `kai_core` / `kai-core`.
+At Accion Intelligence, we’re building KAI to make GPU engineering accessible from a specification. **KAI Pichu is the open-source agent harness underneath it:** a Benchmark SDK that turns an operator contract into a task no model can game, an optimization loop that drives any LLM you choose through generate, measure, profile and repair, and a run record you can audit line by line. It optimizes one GPU operator, or fuses one kernel pipeline, at a time. The Python package and CLI are `kai_pichu` / `kai-pichu`.
 
 You define what the operator must do, how to check it, what to beat and what to time. The harness freezes that contract, keeps the inputs and the oracle out of the model's reach, measures every candidate in paired blocks with confidence intervals, and hands the model the evidence it needs: measured values, compiler errors, Nsight Compute counters. You choose the models, hardware and budget; the code and experiment records remain yours.
 
-**Writing the task is the hard part, so the SDK ships with a skill for Claude Code and Codex.** `kai-core skill install`, then tell your agent which operator to wrap: it follows the packaged manual, keeps the test data hidden from the optimizer, and shows you the contract before anything runs.
+**Writing the task is the hard part, so the SDK ships with a skill for Claude Code and Codex.** `kai-pichu skill install`, then tell your agent which operator to wrap: it follows the packaged manual, keeps the test data hidden from the optimizer, and shows you the contract before anything runs.
 
 <picture>
-  <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="docs/assets/kai-core-workflow-dark.png">
-  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/kai-core-workflow-light.png">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kai-core-workflow-dark.svg">
-  <img src="docs/assets/kai-core-workflow-light.svg" alt="CUDA kernel engineering workflow: define the task; generate and evaluate candidates; repair failures or diagnose performance with optional NCU feedback; recheck the best eligible candidate after search. Code and experiment records remain inspectable with or without acceptance." width="100%">
+  <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="docs/assets/kai-pichu-workflow-dark.png">
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/kai-pichu-workflow-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kai-pichu-workflow-dark.svg">
+  <img src="docs/assets/kai-pichu-workflow-light.svg" alt="CUDA kernel engineering workflow: define the task; generate and evaluate candidates; repair failures or diagnose performance with optional NCU feedback; recheck the best eligible candidate after search. Code and experiment records remain inspectable with or without acceptance." width="100%">
 </picture>
 
 ## How it works
@@ -42,14 +42,14 @@ From the repository root, in your Python environment:
 
 ```bash
 python -m pip install -e .
-python -m kai_core --help
+python -m kai_pichu --help
 ```
 
 <details>
 <summary>Optional: check your GPU environment with the packaged depthwise convolution task</summary>
 
 ```bash
-python -m kai_core benchmark validate examples/depthwise_conv/benchmark.yaml \
+python -m kai_pichu benchmark validate examples/depthwise_conv/benchmark.yaml \
   --split search --output depthwise-preflight.json
 ```
 
@@ -62,9 +62,9 @@ This compiles the cuDNN baseline, runs task checks and baseline correctness on y
 A runnable task is a **manifest + adapter**: the contract for your operator and the code that prepares inputs, loads implementations and checks results. Let your coding agent write it with the packaged skill (next section), or author it by hand from the same manual:
 
 ```bash
-python -m kai_core benchmark guide --output task-manual.md
-python -m kai_core benchmark schema --output task-schema.json
-python -m kai_core benchmark init /absolute/path/to/your-task --template stateless
+python -m kai_pichu benchmark guide --output task-manual.md
+python -m kai_pichu benchmark schema --output task-schema.json
+python -m kai_pichu benchmark init /absolute/path/to/your-task --template stateless
 ```
 
 [Task setup and exact commands →](docs/QUICKSTART.md#2-define-the-task)
@@ -74,9 +74,9 @@ python -m kai_core benchmark init /absolute/path/to/your-task --template statele
 Export the model configuration, set your endpoint and budget, then start the loop against your reviewed task. The optimizer checks the baseline before making its first generation call.
 
 ```bash
-python -m kai_core config --output optimizer.yaml
+python -m kai_pichu config --output optimizer.yaml
 # Edit optimizer.yaml: model, endpoint, key variable, budget; enable NCU if available.
-python -m kai_core optimize /absolute/path/to/your-task/benchmark.yaml \
+python -m kai_pichu optimize /absolute/path/to/your-task/benchmark.yaml \
   --config optimizer.yaml --output runs/my-operator
 ```
 
@@ -89,15 +89,15 @@ Add `--dry-run` to inspect the plan and frozen task bundle without model calls o
 The Benchmark SDK is the part of KAI Pichu you spend the most time with, and it is designed to be written by an agent under your review. It ships as a skill in the same format Claude Code and Codex read:
 
 ```bash
-python -m kai_core skill install                 # ./.claude/skills and ./.codex/skills
-python -m kai_core skill install --scope user    # ~/.claude/skills and ~/.codex/skills
+python -m kai_pichu skill install                 # ./.claude/skills and ./.codex/skills
+python -m kai_pichu skill install --scope user    # ~/.claude/skills and ~/.codex/skills
 ```
 
 Then, in your project, tell the agent what you have and what you want:
 
 > Build a KAI task for my 7×7 depthwise convolution. Baseline is cuDNN, FP16 in and out, FP32 reference. Time the kernel alone.
 
-The skill makes the agent settle the contract with you first (semantics, baseline, reference and tolerance, input domain, timed boundary, editable files), write the hidden side (inputs, oracle, adapter) before the model-visible side, define search and acceptance splits over the same ranges, verify every claim in the task description, run the SDK's validation on every split, and show you the contract before `kai-core optimize`. The same rules are in the manual (`kai-core benchmark guide`) for anyone writing a task by hand.
+The skill makes the agent settle the contract with you first (semantics, baseline, reference and tolerance, input domain, timed boundary, editable files), write the hidden side (inputs, oracle, adapter) before the model-visible side, define search and acceptance splits over the same ranges, verify every claim in the task description, run the SDK's validation on every split, and show you the contract before `kai-pichu optimize`. The same rules are in the manual (`kai-pichu benchmark guide`) for anyone writing a task by hand.
 
 What the SDK enforces for every task, whoever writes it:
 
@@ -108,16 +108,16 @@ What the SDK enforces for every task, whoever writes it:
 | Paired ABBA blocks, bootstrap intervals, per-case speedups reported beside the geometric mean | Ordinary GPU jitter is neither a speedup nor a regression, and a slow case cannot hide in an average |
 | Frozen, fingerprinted task bundle | A run cannot be rescued by editing the task under it |
 
-## Showcase: $1, 2 hours, 4.25× over cuDNN
+## Showcase: $1, 2 hours, 3.5× to 3.9× over cuDNN on held-out shapes
 
-One packaged task, `gpt-5.6-luna` as generator and judge, 13 rounds, no target speedup: a 7×7 depthwise convolution kernel **4.25× faster than cuDNN** on an RTX 5070, confirmed on five held-out cases it never saw.
+One packaged task, `gpt-5.6-luna` as generator and judge, 13 rounds, no target speedup. The best candidate reached **4.25× over cuDNN on the two search cases**; frozen and rerun twice on five held-out cases it never saw, it held a **geometric mean of 3.85× and 3.54×** and was faster than cuDNN on every case (RTX 5070).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/depthwise-showcase-dark.svg">
   <img src="docs/assets/depthwise-showcase-light.svg" alt="Bar chart of speedup over cuDNN for the 13 evaluated candidates. Round 1 reaches 1.96×, round 2 3.52×, round 3 4.25× which stays the best; later rounds land between 3.65× and 4.20×; two candidates failed to build and were repaired in the next round." width="100%">
 </picture>
 
-| Held-out case | cuDNN | KAI Pichu | Speedup |
+| Held-out case (acceptance rerun) | cuDNN | KAI Pichu | Speedup |
 | --- | --- | --- | --- |
 | 8×256×56×56 | 0.710 ms | 0.133 ms | **5.3×** |
 | 16×96×56×56 | 0.538 ms | 0.104 ms | **5.2×** |
@@ -125,11 +125,11 @@ One packaged task, `gpt-5.6-luna` as generator and judge, 13 rounds, no target s
 | 4×100×61×59 | 0.180 ms | 0.045 ms | **4.0×** |
 | 2×768×14×14 | 0.056 ms | 0.037 ms | 1.5× |
 
-Round 1 beat cuDNN with a shared-memory tile; the judge read the NCU profile, called the kernel issue-bound, and two rounds of register blocking took it to 4.25×. [Setup, per-round trajectory and what was left on the table →](docs/showcase-depthwise.md)
+Round 1 beat cuDNN with a shared-memory tile; the judge read the NCU profile, called the kernel issue-bound, and two rounds of register blocking took the search score to 4.25×. [Setup, per-round trajectory and what was left on the table →](docs/showcase-depthwise.md)
 
-## Showcase: 9× on AWQ INT4 decode, a fusion task
+## Showcase: AWQ INT4 decode fusion, 4.5× geometric mean, up to 9× per shape
 
-A `kind: fusion` task built on AutoAWQ's real kernels: the baseline dequantizes INT4 weights into an FP16 matrix and calls cuBLAS, exactly as AutoAWQ does. In 20 rounds `gpt-5.6-luna` fused them into one kernel that is **up to 9.1× faster than the two-stage path** on held-out Llama shapes and **faster than AutoAWQ's own hand-written fused kernel** on two of them.
+A `kind: fusion` task built on AutoAWQ's real kernels: the baseline dequantizes INT4 weights into an FP16 matrix and calls cuBLAS, exactly as AutoAWQ does. In 20 rounds `gpt-5.6-luna` fused them into one kernel that scored 7.22× on the search cases; on the held-out Llama shapes it is **up to 9.1× faster than the two-stage path**, **4.4× and 4.5× as a geometric mean** over two reruns, and **faster than AutoAWQ's own hand-written fused kernel** on two of the four shapes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/awq-showcase-dark.svg">
@@ -177,7 +177,7 @@ The SDK controls built-in timing; adapter-defined metrics require their own boun
 | --- | --- |
 | Install, define a task and run the loop | [Quickstart](docs/QUICKSTART.md) |
 | Read the full showcase runs | [Depthwise 7×7 against cuDNN](docs/showcase-depthwise.md), [AWQ INT4 fusion against AutoAWQ](docs/showcase-awq-fusion.md) |
-| Write a task, by hand or with Claude Code / Codex | [Benchmark manual](src/kai_core/benchmark/MANUAL.md) (`kai-core benchmark guide`); the `kai-benchmark` skill from `kai-core skill install` follows it |
+| Write a task, by hand or with Claude Code / Codex | [Benchmark manual](src/kai_pichu/benchmark/MANUAL.md) (`kai-pichu benchmark guide`); the `kai-benchmark` skill from `kai-pichu skill install` follows it |
 | Understand the Benchmark SDK's design | [Benchmark framework](docs/benchmark-framework.md) |
 | Explore the packaged tasks | [Depthwise 7×7 convolution against cuDNN](examples/depthwise_conv/README.md), [FP16 attention example](examples/attention/README.md) |
 | Fuse kernels you already have | [AWQ INT4 linear layer on AutoAWQ's kernels](examples/awq_linear_fusion/README.md), [epilogue fusion example](examples/fusion/README.md) (`kind: fusion`) |
@@ -223,7 +223,5 @@ If KAI Pichu supports your work, please cite the relevant papers:
 Framework changes use Apache-2.0; third-party components retain their own licenses. See [LICENSE](LICENSE) and [source and license notices](THIRD_PARTY_NOTICES.md).
 
 ---
-
-<sub>**KAI Pichu** (open · single operator) · **KAI Pikachu** (open · end to end) · **KAI Raichu** (managed)</sub>
 
 <sub>Built by [Accion Intelligence](https://github.com/accion-intelligence).</sub>

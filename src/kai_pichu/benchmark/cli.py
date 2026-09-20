@@ -22,7 +22,7 @@ def _write_new(path: Path, value: Any, *, text: bool = False) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="kai-core benchmark", description="Benchmark SDK v1")
+    parser = argparse.ArgumentParser(prog="kai-pichu benchmark", description="Benchmark SDK v1")
     commands = parser.add_subparsers(dest="command", required=True)
     init = commands.add_parser("init", help="Create a task bundle from a working example")
     init.add_argument("directory", type=Path)
@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
             source = Path(__file__).parent / "templates" / args.template
             shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             print(f"Created {target / 'benchmark.yaml'}")
-            print("Adapt the workload and verifier, then run kai-core benchmark validate.")
+            print("Adapt the workload and verifier, then run kai-pichu benchmark validate.")
             return 0
         if args.output is not None and args.output.exists():
             raise ValueError(f"output already exists: {args.output}")

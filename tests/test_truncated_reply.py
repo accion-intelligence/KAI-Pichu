@@ -8,12 +8,12 @@ from threading import Thread
 import pytest
 import yaml
 
-from kai_core.cli import main
-from kai_core.config import ModelConfig
-from kai_core.models import ModelClient, ModelReplyError
+from kai_pichu.cli import main
+from kai_pichu.config import ModelConfig
+from kai_pichu.models import ModelClient, ModelReplyError
 
 ADAPTER = '''
-from kai_core.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
+from kai_pichu.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
 class Task(Benchmark):
     def cases(self, split):
         return [Case(id="one", params={"x": 3 if split != "acceptance" else 17})]
@@ -173,7 +173,7 @@ def test_the_failed_call_is_still_charged_and_recorded(truncating_task):
                                   "model returned no textual candidate/strategy"])
 def test_the_anthropic_provider_classifies_unusable_replies_the_same_way(line):
     # The taxonomy must not depend on which provider produced the reply.
-    source = Path(__file__).parents[1] / "src/kai_core/models.py"
+    source = Path(__file__).parents[1] / "src/kai_pichu/models.py"
     body = source.read_text().split("_complete_anthropic", 1)[1]
     raising = next(l for l in body.splitlines() if line in l)
     assert "ModelReplyError" in raising, f"still a fatal ValueError: {raising.strip()}"
@@ -181,7 +181,7 @@ def test_the_anthropic_provider_classifies_unusable_replies_the_same_way(line):
 
 def test_the_anthropic_provider_keeps_configuration_errors_fatal():
     # A missing SDK or API key is not something a later round can repair.
-    source = Path(__file__).parents[1] / "src/kai_core/models.py"
+    source = Path(__file__).parents[1] / "src/kai_pichu/models.py"
     body = source.read_text().split("_complete_anthropic", 1)[1]
     for line in ("needs the official SDK", "API key environment variable not set"):
         raising = next(l for l in body.splitlines() if line in l)

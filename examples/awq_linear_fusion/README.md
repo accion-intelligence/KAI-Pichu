@@ -75,6 +75,6 @@ another architecture); cuBLAS comes with the CUDA toolkit. Preflight without
 model calls:
 
 ```bash
-python -m kai_core benchmark validate examples/awq_linear_fusion/benchmark.yaml \
+python -m kai_pichu benchmark validate examples/awq_linear_fusion/benchmark.yaml \
   --split search --checks-only --output awq-checks.json
 ```

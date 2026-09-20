@@ -5,7 +5,7 @@ from pathlib import Path
 import random
 from typing import Any, Iterable
 
-from kai_core.benchmark import Benchmark, Case, Observation, Validation, load_python_file
+from kai_pichu.benchmark import Benchmark, Case, Observation, Validation, load_python_file
 
 
 class Task(Benchmark):

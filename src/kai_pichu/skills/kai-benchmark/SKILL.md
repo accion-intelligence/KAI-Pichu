@@ -1,6 +1,6 @@
 ---
 name: kai-benchmark
-description: Build, validate and hand off a KAI Pichu benchmark task (benchmark.yaml + adapter.py) so kai-core can optimize a CUDA operator or fuse a kernel pipeline. Use when the user wants to optimize a GPU kernel or operator with KAI, define a benchmark for the KAI Benchmark SDK, wrap an existing baseline (cuDNN, cuBLAS, PyTorch, their own kernel) as a task, or create a `kind: fusion` task from kernels they already have.
+description: Build, validate and hand off a KAI Pichu benchmark task (benchmark.yaml + adapter.py) so kai-pichu can optimize a CUDA operator or fuse a kernel pipeline. Use when the user wants to optimize a GPU kernel or operator with KAI, define a benchmark for the KAI Benchmark SDK, wrap an existing baseline (cuDNN, cuBLAS, PyTorch, their own kernel) as a task, or create a `kind: fusion` task from kernels they already have.
 ---
 
 # Build a KAI benchmark task
@@ -15,8 +15,8 @@ The authoritative reference is the manual shipped with the installed SDK. Read
 it first, every time, so the field names and rules match the installed version:
 
 ```bash
-kai-core benchmark guide            # the manual (or: python -m kai_core benchmark guide)
-kai-core benchmark schema           # manifest JSON Schema
+kai-pichu benchmark guide            # the manual (or: python -m kai_pichu benchmark guide)
+kai-pichu benchmark schema           # manifest JSON Schema
 ```
 
 ## Workflow
@@ -28,7 +28,7 @@ kai-core benchmark schema           # manifest JSON Schema
    boundary; the editable files and fixed ABI; `kind: operator` or `kind:
    fusion`. Ask about anything you cannot establish from the project. Do not
    invent tolerances, toy inputs or a target speedup.
-2. **Scaffold.** `kai-core benchmark init /abs/path/task --template stateless`
+2. **Scaffold.** `kai-pichu benchmark init /abs/path/task --template stateless`
    (or `stateful`, `command`), then study the closest packaged example under
    `examples/` of the KAI repository: `depthwise_conv` (nvcc kernel vs cuDNN,
    in-graph timing), `attention` (PyTorch baseline), `awq_linear_fusion` and
@@ -52,10 +52,10 @@ kai-core benchmark schema           # manifest JSON Schema
    `iterations: 10`; keep `max_case_regression` at the 0.05 default (cases below it are reported, the overall geometric mean decides).
 7. **Validate.**
    ```bash
-   kai-core benchmark validate benchmark.yaml --split smoke      --checks-only --output checks-smoke.json
-   kai-core benchmark validate benchmark.yaml --split search     --checks-only --output checks-search.json
-   kai-core benchmark validate benchmark.yaml --split acceptance --checks-only --output checks-acceptance.json
-   kai-core benchmark validate benchmark.yaml --split search --output preflight.json
+   kai-pichu benchmark validate benchmark.yaml --split smoke      --checks-only --output checks-smoke.json
+   kai-pichu benchmark validate benchmark.yaml --split search     --checks-only --output checks-search.json
+   kai-pichu benchmark validate benchmark.yaml --split acceptance --checks-only --output checks-acceptance.json
+   kai-pichu benchmark validate benchmark.yaml --split search --output preflight.json
    ```
    Every case passes, every probe is rejected, the baseline's worst error leaves
    margin under the tolerance, a deliberately degraded implementation fails, and
@@ -65,8 +65,8 @@ kai-core benchmark schema           # manifest JSON Schema
    summary for the user to approve: semantics, baseline, reference and
    tolerance, cases per split, boundary, editable files. Then:
    ```bash
-   kai-core config --output optimizer.yaml     # set model, endpoint, key variable, budget, NCU
-   kai-core optimize /abs/path/task/benchmark.yaml --config optimizer.yaml --output runs/task
+   kai-pichu config --output optimizer.yaml     # set model, endpoint, key variable, budget, NCU
+   kai-pichu optimize /abs/path/task/benchmark.yaml --config optimizer.yaml --output runs/task
    ```
 
 ## Rules that are not negotiable

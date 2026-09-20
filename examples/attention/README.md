@@ -61,6 +61,6 @@ another architecture). Compilation includes the ATen headers and takes longer
 than a plain CUDA kernel. Preflight without model calls:
 
 ```bash
-python -m kai_core benchmark validate examples/attention/benchmark.yaml \
+python -m kai_pichu benchmark validate examples/attention/benchmark.yaml \
   --split search --checks-only --output attention-checks.json
 ```

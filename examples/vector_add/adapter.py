@@ -5,7 +5,7 @@ from typing import Any, Iterable
 
 import torch
 
-from kai_core.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
+from kai_pichu.benchmark import Benchmark, Case, Observation, Validation, json_fingerprint, load_python_file
 
 
 class Task(Benchmark):

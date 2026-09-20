@@ -1,6 +1,6 @@
-# KAI Core Benchmark Framework v1
+# KAI Pichu Benchmark Framework v1
 
-Status: implemented as an independent SDK and CLI, integrated with KAI Core's
+Status: implemented as an independent SDK and CLI, integrated with KAI Pichu's
 optimization loop through structured reports. Direct benchmark commands
 remain usable without an optimization agent or model endpoint.
 
@@ -8,7 +8,7 @@ remain usable without an optimization agent or model endpoint.
 
 A task owner supplies a project, representative workloads, correctness rules,
 and optimization objectives. A coding agent can implement the adapter using
-the [benchmark manual](../src/kai_core/benchmark/MANUAL.md). KAI validates
+the [benchmark manual](../src/kai_pichu/benchmark/MANUAL.md). KAI validates
 the adapter, times the baseline, and compares implementation workspaces
 without requiring an LLM.
 
@@ -23,7 +23,7 @@ optimization policy, or a model prompt.
 | Benchmark definition | Workload distribution, initial state, oracle, measured boundary, objectives and constraints | Task owner and their coding agent |
 | Implementation | Source code that computes the declared workload | Project maintainer / optimization agent |
 | Measurement SDK | Lifecycle, paired ordering, timing, raw samples and statistics | KAI |
-| Optimization engine | Hypotheses, edits, resource allocation and selection | KAI Core optimizer |
+| Optimization engine | Hypotheses, edits, resource allocation and selection | KAI Pichu optimizer |
 
 Correctness is checked before ranking. A task that cannot establish correctness
 must report the missing oracle rather than inventing a permissive validator.
@@ -31,7 +31,7 @@ No universal numerical tolerance or guaranteed target speedup is imposed.
 
 ## Public objects
 
-The stable import surface is `kai_core.benchmark`:
+The stable import surface is `kai_pichu.benchmark`:
 
 - `Benchmark`: abstract task adapter, constructed with `BenchmarkSpec`.
 - `Case`: unique ID, JSON-compatible parameters, positive weight and optional
@@ -44,11 +44,11 @@ The stable import surface is `kai_core.benchmark`:
 - `json_fingerprint`: canonical SHA-256 for JSON-compatible input descriptions.
 - `load_python_file`: unique leaf-module loading without stale bytecode.
 
-`kai_core.benchmark.runner.Runner` supplies `validate(checks_only=False)` and
+`kai_pichu.benchmark.runner.Runner` supplies `validate(checks_only=False)` and
 `run(candidate_root)`, returning serializable reports. It has no model dependency.
 The manifest is strictly validated by `BenchmarkSpec`; unknown fields and
 unsupported protocol versions fail. Export its JSON Schema with
-`kai-core benchmark schema`. Add schema changes through explicit protocol versions.
+`kai-pichu benchmark schema`. Add schema changes through explicit protocol versions.
 
 ## Adapter lifecycle
 
@@ -213,8 +213,8 @@ Keep hardware paths, data paths and application-specific settings in manifests
 and adapter options. The SDK must not depend on TC-GNN, Qwen, PyG, specific
 shape sets, or a particular LLM. Examples are ordinary adapters.
 
-KAI Core consumes this protocol directly through `kai-core optimize`.
-The original KAI command/regex workflow is not a KAI Core dependency. Adapters
+KAI Pichu consumes this protocol directly through `kai-pichu optimize`.
+The original KAI command/regex workflow is not a KAI Pichu dependency. Adapters
 can wrap existing executables, but must expose meaningful output verification
 and measurement boundaries. The optimizer consumes structured SDK JSON reports,
 not terminal summaries or an implementation's self-reported speedup.

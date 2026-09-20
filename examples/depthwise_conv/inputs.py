@@ -66,13 +66,19 @@ PROFILES: dict[str, Profile] = {
 # 16-byte aligned and no tile size divides them; 14x14 is smaller than two halos.
 SPLITS: dict[str, list[tuple[str, int, int, int, int, int]]] = {
     "smoke": [("unit_normal", 0, 2, 96, 56, 56)],
-    "search": [("unit_normal", 11, 8, 256, 56, 56),
-               ("relu_sparse", 12, 4, 512, 28, 28)],
+    # Search and acceptance span the same ranges: N 2..16, C 96..768 including an
+    # unaligned count, spatial 14..61 including odd sizes, and all four value
+    # profiles. Search holds the extremes; acceptance samples the interior with
+    # other seeds, so a held-out failure indicts the candidate, not the split.
+    "search": [("large_range", 11, 16, 96, 56, 56),
+               ("relu_sparse", 12, 4, 512, 28, 28),
+               ("smooth_images", 13, 4, 104, 61, 57),
+               ("unit_normal", 14, 2, 768, 14, 14)],
     "acceptance": [("large_range", 1001, 8, 256, 56, 56),
-                   ("smooth_images", 1002, 16, 96, 56, 56),
+                   ("smooth_images", 1002, 12, 160, 56, 56),
                    ("unit_normal", 1003, 4, 192, 57, 61),
                    ("relu_sparse", 1004, 4, 100, 61, 59),
-                   ("unit_normal", 1005, 2, 768, 14, 14)],
+                   ("unit_normal", 1005, 2, 704, 14, 14)],
 }
 
 
