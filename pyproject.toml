@@ -14,6 +14,7 @@ anthropic = ["anthropic>=1"]
 
 [project.scripts]
 kai-pichu = "kai_pichu.cli:main"
+kai-ncu-reader = "kai_pichu.ncu_reader:main"
 
 [build-system]
 requires = ["setuptools>=77"]

@@ -53,7 +53,7 @@ Return `0` on success or a negative value for unsupported arguments. Launch
 all work on `stream`. The call is captured into a CUDA Graph and replayed:
 do not call `cudaMalloc`/`cudaFree`, do not synchronize the device or the
 stream, and do not keep host-side state between calls; use `workspace` for
-scratch. The build is `nvcc -O3 -std=c++17 --use_fast_math` for `sm_120` with
+scratch. The build is `nvcc -O3 -std=c++17 --use_fast_math -lineinfo` for `sm_120` with
 the PyTorch/ATen headers on the include path, linked against libtorch, cuBLAS
 and the CUDA runtime, so ATen operators and cuBLAS calls are available. The
 baseline is PyTorch's fused `scaled_dot_product_attention`; calling it again

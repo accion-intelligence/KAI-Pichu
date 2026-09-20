@@ -89,7 +89,7 @@ class DepthwiseConv(Benchmark):
         library = Path(directory.name) / "kernel.so"
         options = self.spec.options
         cudnn_include, cudnn_lib, cudnn_library = cudnn_dirs(options)
-        command = [str(options["nvcc"]), "-O3", "-std=c++17", "--use_fast_math",
+        command = [str(options["nvcc"]), "-O3", "-std=c++17", "--use_fast_math", "-lineinfo",
                    "--expt-relaxed-constexpr", "-shared", "-Xcompiler=-fPIC",
                    f"-arch={options['cuda_arch']}", f"-I{workspace}", f"-I{cudnn_include}"]
         command += [f"-I{path}" for path in include_paths(device_type="cuda")]

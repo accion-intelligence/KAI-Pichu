@@ -162,6 +162,8 @@ class Evaluator:
             command.append("--metrics=" + ",".join(settings.metrics))
         else:
             command.extend("--section=" + section for section in settings.sections)
+        if settings.import_source:
+            command.append("--import-source=yes")
         command += [sys.executable, "-m", "kai_pichu.profile_worker", str(self.workspace.manifest),
                     "--candidate", str(candidate), "--output", str(metadata)]
         case_selection = self._profile_case_selection(weakest_case, policy)

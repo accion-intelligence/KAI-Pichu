@@ -78,7 +78,7 @@ class Attention(Benchmark):
         library = Path(directory.name) / "kernel.so"
         options = self.spec.options
         cxx11_abi = int(torch._C._GLIBCXX_USE_CXX11_ABI)
-        command = [str(options["nvcc"]), "-O3", "-std=c++17", "--use_fast_math",
+        command = [str(options["nvcc"]), "-O3", "-std=c++17", "--use_fast_math", "-lineinfo",
                    "--expt-relaxed-constexpr", "-shared", "-Xcompiler=-fPIC",
                    f"-D_GLIBCXX_USE_CXX11_ABI={cxx11_abi}",
                    f"-arch={options['cuda_arch']}", f"-I{workspace}"]

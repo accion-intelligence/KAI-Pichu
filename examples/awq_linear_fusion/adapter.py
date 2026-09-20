@@ -79,7 +79,7 @@ class AwqLinear(Benchmark):
         library = Path(directory.name) / "kernel.so"
         options = self.spec.options
         # -I{workspace} resolves solution.cu; -I{root} resolves the read-only kernels/ sources.
-        command = [str(options["nvcc"]), "-O3", "-std=c++17", "--use_fast_math",
+        command = [str(options["nvcc"]), "-O3", "-std=c++17", "--use_fast_math", "-lineinfo",
                    "--expt-relaxed-constexpr", "-shared", "-Xcompiler=-fPIC",
                    f"-arch={options['cuda_arch']}", f"-I{workspace}", f"-I{self.root}"]
         command += [f"-I{path}" for path in include_paths(device_type="cuda")]

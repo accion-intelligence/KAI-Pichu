@@ -1,33 +1,40 @@
-# NCU report reader setup
+# NCU report reader
 
-KAI Pichu calls an existing external NCU v1 report reader. The report parser,
-source attribution and full binary disassembly remain in that external program.
-KAI Pichu does not contain a replacement implementation.
-
-The default command name is `kai-ncu-reader`. Set `profile.report_reader` or CLI
-`--report-reader` to select an existing compatible reader command or launcher.
-A launcher can give your existing installation this command name without changing
-its implementation. From this source distribution, run:
+`kai-ncu-reader` ships with this package and is the reader the profile layer
+uses by default. It opens the `.ncu-rep` file Nsight Compute wrote and answers
+one question per call: the launches in the report, every metric and NVIDIA rule
+of one launch, per-instruction counters, warp-stall samples, or the SASS/PTX of
+the launch. Its query design follows [VeloQ](https://github.com/lucifer1004/veloq).
 
 ```bash
-python scripts/install_report_reader_alias.py /path/to/existing-reader \
-  --python-dir-env EXISTING_READER_REPORT_DIRECTORY_VARIABLE
+kai-ncu-reader ncu launches REPORT.ncu-rep
+kai-ncu-reader ncu inspect REPORT.ncu-rep --row-id launch:0
+kai-ncu-reader ncu warp-stalls REPORT.ncu-rep --row-id launch:0 --by reason
 ```
 
-Replace the executable path and environment-variable placeholder with those of
-your existing reader installation. The launcher forwards all arguments unchanged.
-It maps `KAI_PICHU_REPORT_READER_DIR` to the reader's existing environment variable,
-so the packaged report API compatibility adapter continues to work. If the reader
-already accepts `KAI_PICHU_REPORT_READER_DIR`, omit `--python-dir-env`.
-The script creates `~/.local/bin/kai-ncu-reader`; add that directory to PATH.
-It does not overwrite an existing command. The external reader is not bundled.
+## Requirements
 
-For a fresh report, the reader needs NVIDIA's installed `ncu_report` Python API.
-Set `profile.ncu_report_dir` or CLI `--ncu-report-dir` to its `extras/python`
-directory if automatic discovery fails. Source/SASS/PTX queries also depend on
-captured binary/source data and CUDA's disassembly tools.
+Reading a report needs the `ncu_report` Python module that Nsight Compute
+installs under `extras/python`. The reader finds it from the `ncu` on PATH,
+under `/usr/local/cuda*/nsight-compute-*` or `/opt/nvidia/nsight-compute/*`, or
+from `profile.ncu_report_dir` (CLI `--ncu-report-dir`) when the installation is
+elsewhere. Nothing is installed automatically.
 
-The benchmark SDK and optimization loop require no report reader. With profiling
-enabled, Nsight Compute collects the report and CSV. The CSV fallback works
-without another executable. Public query results identify the backend as
-`ncu_report` or `csv`. No component automatically installs software or invokes sudo.
+Per-instruction evidence exists only if the capture collected it: the default
+capture adds the `SourceCounters` section and `--import-source yes`, and source
+lines appear when the kernel was compiled with `-lineinfo`. Without those the
+reader still serves launches, metrics and rules, and says explicitly that
+instruction attribution is absent rather than reporting zeros.
+
+## Without a readable report
+
+If the reader or the `ncu_report` module is unavailable, the profile layer falls
+back to the CSV Nsight Compute wrote alongside the report. The CSV carries the
+metric values but no descriptions, no NVIDIA rules and no instruction-level
+attribution; every query result names its backend (`ncu_report` or `csv`).
+
+## Another reader
+
+`profile.report_reader` may name a different executable that speaks the same
+contract: `<reader> ncu <verb> <report> [options]` printing one JSON envelope
+with `schema: v1`, `source.kind: ncu`, `source.version: v1` and `data.rows`.

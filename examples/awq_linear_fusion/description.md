@@ -69,7 +69,7 @@ Return `0` on success or a negative value for unsupported arguments. Launch all
 work on `stream`. The call is captured into a CUDA Graph and replayed: do not
 allocate device memory, synchronize, or keep host-side state between calls
 (a lazily created cuBLAS handle, as in the baseline, is acceptable). The build
-is `nvcc -O3 -std=c++17 --use_fast_math` for `sm_120`, linked against cuBLAS
+is `nvcc -O3 -std=c++17 --use_fast_math -lineinfo` for `sm_120`, linked against cuBLAS
 and the CUDA runtime.
 
 ## Measurement

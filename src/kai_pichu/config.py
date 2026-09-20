@@ -77,8 +77,11 @@ class ProfileConfig(ConfigModel):
     metrics: list[str] = Field(default_factory=list)
     sections: list[str] = Field(default_factory=lambda: [
         "SpeedOfLight", "LaunchStats", "Occupancy", "MemoryWorkloadAnalysis",
-        "SchedulerStats", "WarpStateStats",
+        "SchedulerStats", "WarpStateStats", "ComputeWorkloadAnalysis", "InstructionStats", "SourceCounters",
     ])
+    import_source: bool = Field(default=True, description=(
+        "Pass --import-source yes so per-instruction counters and warp-stall samples map to source lines "
+        "when the kernel was built with -lineinfo"))
     report_reader: str | None = None
     ncu_report_dir: str | None = None
     query_rounds: int = Field(default=4, ge=0, le=10)

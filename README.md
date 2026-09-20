@@ -190,7 +190,7 @@ Bring a new operator, an interesting failure, a better diagnostic strategy, or r
 
 ## Research and attribution
 
-The optimization loop builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)** and **[StitchCUDA](https://icml.cc/virtual/2026/poster/64924)**. Its optimizer source history and retained MIT notices are documented in the repository. The task design and evaluation methodology draw on **[CUDAHercules](https://arxiv.org/abs/2605.08467)**.
+The profile query layer, one narrow question per call over a captured Nsight Compute report, is inspired by [VeloQ](https://github.com/lucifer1004/veloq). The optimization loop builds on the CUDA generation and hardware-feedback workflow of **[CudaForge](https://arxiv.org/abs/2511.01884)** and **[StitchCUDA](https://icml.cc/virtual/2026/poster/64924)**. Its optimizer source history and retained MIT notices are documented in the repository. The task design and evaluation methodology draw on **[CUDAHercules](https://arxiv.org/abs/2605.08467)**.
 
 If KAI Pichu supports your work, please cite the relevant papers:
 

@@ -55,7 +55,7 @@ Return `0` on success or a negative value for unsupported arguments. Launch all
 work on `stream`. The call is captured into a CUDA Graph and replayed: do not
 allocate device memory, synchronize, or keep host-side state between calls.
 `solution.cu` may still `#include` the files under `kernels/` if it reuses parts
-of them. The build is `nvcc -O3 -std=c++17 --use_fast_math` for `sm_120`,
+of them. The build is `nvcc -O3 -std=c++17 --use_fast_math -lineinfo` for `sm_120`,
 linked against the CUDA runtime only.
 
 ## Measurement

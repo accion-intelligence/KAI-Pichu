@@ -51,7 +51,7 @@ allocate device memory, synchronize the device or the stream, or depend on
 host-side state between calls. Static caches (a library handle, a per-shape
 plan) are allowed only if they are created on the first call for a shape,
 which happens in eager warm-up before capture. The build is
-`nvcc -O3 -std=c++17 --use_fast_math` for `sm_120`, linked against cuDNN and
+`nvcc -O3 -std=c++17 --use_fast_math -lineinfo` for `sm_120`, linked against cuDNN and
 the CUDA runtime; `solution.cu` is the only file that may change.
 
 ## Baseline

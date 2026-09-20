@@ -10,24 +10,26 @@ the benchmark speedup or acceptance score.
 
 Set `profile.enabled: true`. Nsight Compute must be installed and usable by the
 current user. The default capture requests `SpeedOfLight`, `LaunchStats`,
-`Occupancy`, `MemoryWorkloadAnalysis`, `SchedulerStats`, and `WarpStateStats`.
+`Occupancy`, `MemoryWorkloadAnalysis`, `SchedulerStats`, `WarpStateStats`,
+`ComputeWorkloadAnalysis` (per-pipe utilization: FMA, ALU, LSU, tensor, shared
+memory) and `InstructionStats` (executed instruction counts and mix).
+Together the last two tell an issue-bound kernel from a memory-bound one.
 These configurable sections provide initial compute, memory, resource and
 scheduler evidence. A nonempty `profile.metrics` list overrides sections,
 preserving existing explicit-metric configurations.
 
 Each capture saves `capture.ncu-rep`, `metrics.csv`, `workload.json`, the process
-log and `profile.json`. CSV values use NCU base units. An optional NCU report
-reader supplies structured report data; `profile.report_reader` can select its
-executable. See [dependency setup](PROFILE_DEPENDENCIES.md), also available with
-`kai-pichu profile --dependencies`. The
-parent KAI source tree is not a runtime dependency.
+log and `profile.json`. CSV values use NCU base units. The packaged
+`kai-ncu-reader` opens the report; `profile.report_reader` can select another
+executable with the same contract. See [reader setup](PROFILE_DEPENDENCIES.md),
+also available with `kai-pichu profile --dependencies`.
 
-The report reader supplies report metric descriptions/units and NVIDIA rule findings, with
-source/SASS/PTX queries where captured data permits. NVIDIA's installed
-`ncu_report` Python API is required when first opening a report without a report
-cache. Set `profile.ncu_report_dir` to its `extras/python` directory if discovery
-fails. A packaged compatibility adapter handles absent timed-warp APIs on older
-NCU and maps nonfinite values to null.
+The reader supplies metric descriptions and units, NVIDIA rule findings, and
+per-instruction counters, warp-stall samples and SASS/PTX where the capture
+collected them (the default capture does). It needs NVIDIA's installed
+`ncu_report` Python API; set `profile.ncu_report_dir` to its `extras/python`
+directory if discovery fails. A packaged compatibility adapter handles absent
+timed-warp APIs on older NCU and maps nonfinite values to null.
 
 If the report reader is unavailable, CSV supplies a structured metric catalog
 and values. Descriptions, rules and instruction attribution are explicitly
@@ -38,7 +40,7 @@ unavailable in this fallback. Missing descriptions are never guessed.
 The optimization judge starts with a small overview: a launch inventory, up to
 12 actual metric families, selected headline measurements, metric/rule counts,
 available operations, diagnostic routes and the query JSON Schema. Full rule
-findings and counter details stay out of the initial prompt. The external reader
+findings and counter details stay out of the initial prompt. The reader
 may load/cache full launch details to build this overview. Use `launches` to
 select other kernels from a multi-launch operator.
 

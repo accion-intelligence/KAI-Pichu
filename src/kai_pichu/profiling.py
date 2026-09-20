@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import tempfile
 import time
 from typing import Any, Literal
@@ -123,8 +124,8 @@ class ProfileReport:
         if not self.inputs:
             raise ValueError("no NCU report or CSV exists")
         self.identity = {**(identity or {}), "report_path": str(self.report), "input_sha256": self.inputs}
-        self.binary = shutil.which(self.settings.report_reader or "kai-ncu-reader")
-        self.backend = "ncu_report" if self.binary and self.report.is_file() else "csv"
+        self.reader = self._reader_command()
+        self.backend = "ncu_report" if self.reader and self.report.is_file() else "csv"
         self.cache = self.report.parent / (self.report.name + ".kai-pichu")
         self.warnings: list[str] = []
         self.launches: list[dict[str, Any]] | None = None
@@ -141,12 +142,23 @@ class ProfileReport:
         if any(not Path(path).is_file() or file_hash(Path(path)) != digest for path, digest in self.inputs.items()):
             raise ValueError("profile inputs changed; collect or open a new report")
 
+    def _reader_command(self) -> list[str] | None:
+        """The reader to run: a configured executable, `kai-ncu-reader` on PATH, or this package's own module."""
+        if self.settings.report_reader:
+            found = shutil.which(self.settings.report_reader)
+            return [found] if found else None
+        found = shutil.which("kai-ncu-reader")
+        if found:
+            return [found]
+        # The packaged reader is always installed next to this module, PATH or not.
+        return [sys.executable, "-m", "kai_pichu.ncu_reader"]
+
     def _reader_query(self, verb: str, args: list[str]) -> dict[str, Any]:
-        if not self.binary:
+        if not self.reader:
             raise ValueError("NCU report reader is unavailable; see dependency setup or set profile.report_reader")
-        binary = Path(self.binary).resolve()
+        binary = Path(self.reader[0] if len(self.reader) == 1 else Path(__file__).with_name("ncu_reader.py")).resolve()
         key = hashlib.sha256(json.dumps({"inputs": self.inputs, "verb": verb, "args": args,
-            "binary": str(binary), "mtime": binary.stat().st_mtime_ns,
+            "binary": self.reader, "mtime": binary.stat().st_mtime_ns,
             "ncu": self.settings.ncu, "ncu_report_dir": self.settings.ncu_report_dir,
             "adapter_version": 1}, sort_keys=True).encode()).hexdigest()
         saved = self.cache / f"{key}.json"
@@ -160,7 +172,7 @@ class ProfileReport:
         env["KAI_PICHU_NCU"] = self.settings.ncu
         if self.settings.ncu_report_dir:
             env["KAI_PICHU_NCU_REPORT_DIR"] = self.settings.ncu_report_dir
-        result = run_process([self.binary, "ncu", verb, str(self.report), *args], cwd=self.report.parent,
+        result = run_process([*self.reader, "ncu", verb, str(self.report), *args], cwd=self.report.parent,
                              log=attempt / "stderr.log", stdout=stdout, env=env,
                              timeout=self._remaining(), resources=Resources(), gpu_device=None)
         if result["status"] != "completed":

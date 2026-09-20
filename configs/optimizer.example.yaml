@@ -33,6 +33,9 @@ profile:
     - MemoryWorkloadAnalysis
     - SchedulerStats
     - WarpStateStats
+    - ComputeWorkloadAnalysis
+    - InstructionStats
+    - SourceCounters
   # metrics: [gpu__time_duration.sum]  # Explicit metrics override sections.
   # ncu_report_dir: /path/to/nsight-compute/extras/python
   query_rounds: 4  # Maximum evidence exchanges per diagnosis; the judge may stop earlier.
