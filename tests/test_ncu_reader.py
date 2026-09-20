@@ -221,3 +221,7 @@ def test_profile_layer_uses_the_packaged_reader_end_to_end(fake_api_dir, tmp_pat
     assert stalls["data"]["auxiliary"]["total_samples"] == 130
     metrics = view.query({"operation": "metrics", "counter": "launch__registers_per_thread"}, timeout=60)
     assert metrics["data"]["rows"][0]["value"] == 64
+    summary = overview["stall_summary"]
+    assert summary["status"] == "available" and summary["total_samples"] == 130
+    assert summary["top_reasons"][0] == {"reason": "long_scoreboard", "share": round(120 / 130, 3)}
+    assert summary["hottest_instructions"][0]["sass"].startswith("LDC") and summary["hottest_instructions"][0]["line"] == 7

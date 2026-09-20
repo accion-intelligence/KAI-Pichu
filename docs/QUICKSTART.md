@@ -106,7 +106,7 @@ python -m kai_pichu optimize /absolute/path/to/your-task/benchmark.yaml \
 
 The loop freezes the task and baseline into the run directory, runs the search preflight on the GPU, and makes its first model call only after the baseline passes. It prints a status line at the end; `summary.json` holds the result.
 
-An interrupted run resumes with the same command plus `--resume`. Only the `budget` section (rounds, model calls, seconds) may differ from the original configuration; such changes are recorded in `state.json` and `summary.json`. Reserved calls and interrupted rounds remain charged to the budget, and completed runs cannot be resumed: start a new run to change the task or configuration.
+An interrupted run resumes with the same command plus `--resume`. Only the `budget` section (rounds, model calls, seconds) and the `profile` section (NCU capture and query settings) may differ from the original configuration; such changes are recorded in `state.json` and `summary.json`. Reserved calls and interrupted rounds remain charged to the budget. A finished run can be continued the same way by raising `budget.rounds`; it picks up from its history and reruns acceptance at the new end. Start a new run to change the task, the models or the context settings.
 
 ```bash
 python -m kai_pichu optimize /absolute/path/to/your-task/benchmark.yaml \

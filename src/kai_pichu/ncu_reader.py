@@ -75,6 +75,7 @@ class Report:
         self.api = load_api()
         self.names = Names(self.api)
         self.path = path
+        self.outside_kernel: dict[str, float] = {}
         context = self.api.load_report(str(path))
         self.actions = [context.range_by_idx(r).action_by_idx(a)
                         for r in range(context.num_ranges())
@@ -159,18 +160,40 @@ class Report:
         if not metric.has_correlation_ids() or metric.num_instances() == 0:
             return False
         ids = metric.correlation_ids()
-        kinds = self.api.IMetric
-        if ids.kind() not in (kinds.ValueKind_UINT64, kinds.ValueKind_UINT32):
+        count = metric.num_instances()
+        try:
+            # What matters is whether the ids read as addresses the report can
+            # disassemble. PC samples also land outside the kernel's own code
+            # (other modules, trap handlers), so probe several ids, not the first.
+            probes = [int(ids.as_uint64(i)) for i in sorted({0, count // 4, count // 2, (3 * count) // 4, count - 1})]
+        except Exception:
             return False
-        first, last = int(ids.as_uint64(0)), int(ids.as_uint64(metric.num_instances() - 1))
-        if min(first, last) < MIN_PROGRAM_COUNTER:
+        if min(probes) < MIN_PROGRAM_COUNTER:
             return False
-        return self.sass(action, first) is not None and self.sass(action, last) is not None
+        return any(self.sass(action, address) is not None for address in probes)
 
     # ---- per-instruction evidence ----------------------------------------------
 
     def instruction_counters(self, action: Any) -> dict[int, dict[str, float]]:
-        """address -> {counter name: value} for every metric NCU attributed to program counters."""
+        """address -> {counter name: value} for every metric NCU attributed to program counters.
+
+        Addresses the report cannot disassemble (samples that fell outside the
+        kernel's own code) are dropped; ``outside_kernel`` keeps their totals so
+        the caller can report how much was left unattributed.
+        """
+        per_address = self._raw_instruction_counters(action)
+        inside: dict[int, dict[str, float]] = {}
+        outside: dict[str, float] = defaultdict(float)
+        for address, values in per_address.items():
+            if self.sass(action, address) is None:
+                for name, value in values.items():
+                    outside[name] += value
+            else:
+                inside[address] = values
+        self.outside_kernel = dict(outside)
+        return inside
+
+    def _raw_instruction_counters(self, action: Any) -> dict[int, dict[str, float]]:
         per_address: dict[int, dict[str, float]] = defaultdict(dict)
         kinds = self.api.IMetric
         for name in action.metric_names():
@@ -314,7 +337,9 @@ def warp_stalls(report: Report, args: argparse.Namespace) -> dict[str, Any]:
             for row in rows:
                 row["samples"] = sum(row["counters"].values())
             rows.sort(key=lambda row: -row["samples"])
-    auxiliary = {"total_samples": total, "sample_count_metric": report.scalar(action, SAMPLE_COUNT)}
+    outside = sum(value for name, value in report.outside_kernel.items() if name.startswith(STALL_PREFIX))
+    auxiliary = {"total_samples": total, "samples_outside_kernel": outside,
+                 "sample_count_metric": report.scalar(action, SAMPLE_COUNT)}
     if not total:
         auxiliary["note"] = ("No warp-stall samples attributed to instructions in this report: capture with the "
                              "SourceCounters section (PC sampling).")

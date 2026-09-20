@@ -1043,10 +1043,12 @@ def test_resume_accepts_a_changed_budget_but_not_a_changed_contract(task):
     assert main(["optimize", str(manifest), "--config", str(config_path), "--output", str(output), "--dry-run"]) == 0
     config = yaml.safe_load(config_path.read_text())
     config["budget"]["rounds"] = 2
+    config["profile"] = {"enabled": False, "query_rounds": 2}  # the profile section may change too
     shorter = config_path.with_name("shorter.yaml"); shorter.write_text(yaml.safe_dump(config))
     assert main(["optimize", str(manifest), "--config", str(shorter), "--output", str(output), "--resume"]) == 0
     state = json.loads((output / "state.json").read_text())
     assert state["budget_changes"][0]["from"]["rounds"] == 3 and state["budget_changes"][0]["to"]["rounds"] == 2
+    assert state["profile_changes"][0]["to"]["query_rounds"] == 2
     assert json.loads((output / "config.json").read_text())["budget"]["rounds"] == 2
     assert len(state["history"]) == 2 and json.loads((output / "summary.json").read_text())["budget_changes"]
     config["max_context_chars"] = 99999
@@ -1329,3 +1331,28 @@ def test_continuation_can_be_disabled(task, monkeypatch):
     assert len(calls) == 1
     state = json.loads((output / "state.json").read_text())
     assert state["history"][0]["metrics"]["error_type"] == "ModelReplyError"
+
+
+def test_a_finished_run_continues_when_rounds_are_raised(task, monkeypatch):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["budget"]["rounds"] = 2
+    values["budget"]["llm_calls"] = 10
+    values["generator"]["responses"] = [reply(5), reply(4), reply(3), reply(2)]
+    opt = json.dumps({"bottleneck": "b", "optimization_method": "m", "modification_plan": "p"})
+    values["judge"]["responses"] = [opt, opt, opt]
+    first = config_path.with_name("two.yaml"); first.write_text(yaml.safe_dump(values))
+    assert main(["optimize", str(manifest), "--config", str(first), "--output", str(output)]) == 0
+    state = json.loads((output / "state.json").read_text())
+    assert state["status"] == "accepted" and len(state["history"]) == 2
+    assert (output / "accepted" / "solution.py").read_text().endswith("COST = 4\n")
+    # Same rounds: refused. More rounds: continues from round 3 and re-delivers.
+    assert main(["optimize", str(manifest), "--config", str(first), "--output", str(output), "--resume"]) == 2
+    values["budget"]["rounds"] = 4
+    more = config_path.with_name("four.yaml"); more.write_text(yaml.safe_dump(values))
+    assert main(["optimize", str(manifest), "--config", str(more), "--output", str(output), "--resume"]) == 0
+    state = json.loads((output / "state.json").read_text())
+    assert state["status"] == "accepted" and len(state["history"]) == 4
+    assert state["continued_after"] == [{"status": "accepted", "rounds": 2}]
+    assert len(state["acceptance_reports"]) == values["budget"]["acceptance_repeats"]
+    assert (output / "accepted" / "solution.py").read_text().endswith("COST = 2\n")

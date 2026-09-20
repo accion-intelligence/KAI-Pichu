@@ -38,9 +38,12 @@ DIAGNOSTICS = [
      "purpose": "Discover occupancy/resource metrics; also try register or shared."},
     {"question": "Why are warps not issuing?", "operation": "catalog", "query": "stall",
      "purpose": "Compare measured stall reasons with eligible warps and scheduler evidence."},
-    {"question": "Which code or instructions contribute?", "operation": "source-metrics",
-     "purpose": "Use a discovered per-PC counter; needs captured source counters and line information. "
-                "disasm reads SASS/PTX; warp-stalls needs timed warp samples. Missing evidence is not zero."},
+    {"question": "Which instructions or source lines stall?", "operation": "warp-stalls",
+     "purpose": "stall_summary in the overview has the top reasons and hottest instructions; warp-stalls --by line or "
+                "sass expands them. Needs the SourceCounters section in the capture; missing samples are not zero stalls."},
+    {"question": "Which code or instructions execute most or move the memory?", "operation": "source-metrics",
+     "purpose": "Per-instruction counters discovered with catalog (inst_executed, memory_*), grouped by line, SASS or file; "
+                "disasm reads SASS/PTX. Missing evidence is not zero."},
 ]
 
 
@@ -111,6 +114,17 @@ def reader_diagnostic(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: reader_diagnostic(item) for key, item in value.items()}
     return value
+
+
+def source_path(path: Any) -> Any:
+    """A source file relative to the candidate or task bundle it came from; host directories are noise."""
+    if not isinstance(path, str):
+        return path
+    for marker in ("/candidates/", "/bundle/"):
+        if marker in path:
+            tail = path.split(marker, 1)[1]
+            return tail.split("/", 1)[1] if marker == "/candidates/" and "/" in tail else tail
+    return path
 
 
 class ProfileReport:
@@ -316,6 +330,9 @@ class ProfileReport:
             auxiliary.pop("source_index", None)
             auxiliary["available_views"] = ["sass", "ptx", "source"]
             return self._page(rows, request, auxiliary=auxiliary)
+        for row in rows:
+            if isinstance(row, dict) and row.get("file"):
+                row["file"] = source_path(row["file"])
         result = self._page(rows, request, auxiliary=auxiliary, total=data.get("total_matched"))
         if request.offset + result["count"] < result["total_matched"]:
             result["next_offset"] = request.offset + result["count"] if result["count"] else None
@@ -416,4 +433,33 @@ class ProfileReport:
                 "gpu__time_duration.sum", "sm__throughput.avg.pct_of_peak_sustained_elapsed",
                 "dram__throughput.avg.pct_of_peak_sustained_elapsed", "launch__registers_per_thread",
                 "sm__warps_active.avg.pct_of_peak_sustained_active"}]
+        if self.backend == "ncu_report":
+            result["stall_summary"] = self._stall_summary(row_id, timeout=max(0.0, timeout - (time.monotonic() - started)))
         return result
+
+    def _stall_summary(self, row_id: str, *, timeout: float) -> dict[str, Any]:
+        """Where the primary launch's warps waited, from the captured PC samples.
+
+        The judge otherwise has to guess whether instruction-level evidence exists
+        and spend a query round to find out; the top reasons and the hottest
+        instructions are small enough to travel with the overview.
+        """
+        reasons = self.query({"operation": "warp-stalls", "row_id": row_id, "by": "reason", "limit": 6}, timeout=timeout)
+        if reasons["status"] != "available":
+            return {"status": reasons["status"], "note": "warp-stall query failed; ask for it explicitly"}
+        total = reasons["data"]["auxiliary"].get("total_samples") or 0
+        rows = [row for row in reasons["data"]["rows"] if "reason" in row]
+        if not total or not rows:
+            return {"status": "no_samples", "note": "The report carries no PC-sampling data for this launch; "
+                                                    "stall attribution needs the SourceCounters section."}
+        remaining = max(0.0, self.deadline - time.monotonic())
+        hottest = self.query({"operation": "warp-stalls", "row_id": row_id, "by": "sass", "limit": 5}, timeout=remaining)
+        return {
+            "status": "available", "total_samples": total,
+            "top_reasons": [{"reason": row["reason"], "share": round(row.get("share") or 0, 3)} for row in rows],
+            "hottest_instructions": [{"sass": row.get("sass"), "file": source_path(row.get("file")), "line": row.get("line"),
+                                      "samples": row.get("samples"), "reasons": row.get("counters")}
+                                     for row in hottest["data"]["rows"]] if hottest["status"] == "available" else [],
+            "note": "Samples are where warps waited, attributed to the instruction; use warp-stalls --by line or "
+                    "source-metrics for the surrounding code.",
+        }

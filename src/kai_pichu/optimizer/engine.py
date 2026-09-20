@@ -429,6 +429,7 @@ class OptimizationLoop:
             (root / "best_search.patch").write_text(self.workspace.patch(source))
             if self.state["status"] == "accepted":
                 accepted = root / "accepted"
+                shutil.rmtree(accepted, ignore_errors=True)  # a continued run replaces its earlier delivery
                 shutil.copytree(source, accepted)
         summary = {"project": "KAI Pichu", "backend": "kai_pichu.optimizer",
                    "status": self.state["status"], "message": self.state.get("message", ""),
@@ -441,21 +442,26 @@ class OptimizationLoop:
                    "gpu_policy": self.config.resources.gpu_policy}
         write_json(root / "summary.json", summary, replace=True)
 
-    def _adopt_budget_change(self, config_fingerprint: str) -> None:
-        """Allow a resumed run to continue under a different budget.
+    RESUMABLE_SECTIONS = ("budget", "profile")
 
-        Rounds, model calls and wall time are limits on the experiment, not part
-        of its contract: models, profiling and context settings must still match
-        the recorded config.json. The change is recorded in the checkpoint and
+    def _adopt_config_change(self, config_fingerprint: str) -> None:
+        """Allow a resumed run to continue under a different budget or profiling setup.
+
+        Rounds, model calls and wall time are limits on the experiment, and the
+        NCU capture is diagnostic evidence; neither changes the task or the
+        comparability of scores. Models and context settings must still match
+        the recorded config.json. Every change is recorded in the checkpoint and
         config.json is replaced so the run directory describes what actually ran.
         """
         original = OptimizeConfig.model_validate(json.loads((self.workspace.root / "config.json").read_text()))
-        if original.model_dump(exclude={"budget"}) != self.config.model_dump(exclude={"budget"}):
-            raise ValueError("resume requires the original configuration; only the budget may change")
-        if original.budget != self.config.budget:
-            self.state.setdefault("budget_changes", []).append({
-                "at_round": self.state["next_round"], "from": original.budget.model_dump(),
-                "to": self.config.budget.model_dump()})
+        frozen = set(self.RESUMABLE_SECTIONS)
+        if original.model_dump(exclude=frozen) != self.config.model_dump(exclude=frozen):
+            raise ValueError("resume requires the original configuration; only the budget and profile sections may change")
+        for section in self.RESUMABLE_SECTIONS:
+            before, after = getattr(original, section), getattr(self.config, section)
+            if before != after:
+                self.state.setdefault(f"{section}_changes", []).append({
+                    "at_round": self.state["next_round"], "from": before.model_dump(), "to": after.model_dump()})
         self.state["config_fingerprint"] = config_fingerprint
         write_json(self.workspace.root / "config.json", self.config.model_dump(), replace=True)
 
@@ -469,9 +475,14 @@ class OptimizationLoop:
             if resume:
                 self.state = json.loads((root / "state.json").read_text())
                 if self.state["status"] in ("accepted", "not_accepted", "no_improvement"):
-                    raise ValueError("completed runs cannot be resumed; use a new output directory")
+                    # A finished search continues only with more rounds; the final acceptance is rerun afterwards.
+                    if self.config.budget.rounds <= self.state["next_round"]:
+                        raise ValueError(f"this run completed {self.state['next_round']} rounds; raise budget.rounds "
+                                         "above that to continue it, or use a new output directory")
+                    self.state.setdefault("continued_after", []).append(
+                        {"status": self.state["status"], "rounds": self.state["next_round"]})
                 if self.state["config_fingerprint"] != config_fingerprint:
-                    self._adopt_budget_change(config_fingerprint)
+                    self._adopt_config_change(config_fingerprint)
                 self.previous_elapsed = self.state["elapsed_seconds"]
                 self._verify()
             else:

@@ -127,23 +127,23 @@ One packaged task, `gpt-5.6-luna` as generator and judge, 13 rounds, no target s
 
 Round 1 beat cuDNN with a shared-memory tile; the judge read the NCU profile, called the kernel issue-bound, and two rounds of register blocking took the search score to 4.25×. [Setup, per-round trajectory and what was left on the table →](docs/showcase-depthwise.md)
 
-## Showcase: AWQ INT4 decode fusion, 4.5× geometric mean, up to 9× per shape
+## Showcase: AWQ INT4 decode fusion, 3.4× geometric mean, up to 4.4× per shape
 
-A `kind: fusion` task built on AutoAWQ's real kernels: the baseline dequantizes INT4 weights into an FP16 matrix and calls cuBLAS, exactly as AutoAWQ does. In 20 rounds `gpt-5.6-luna` fused them into one kernel that scored 7.22× on the search cases; on the held-out Llama shapes it is **up to 9.1× faster than the two-stage path**, **4.4× and 4.5× as a geometric mean** over two reruns, and **faster than AutoAWQ's own hand-written fused kernel** on two of the four shapes.
+A `kind: fusion` task built on AutoAWQ's real kernels: the baseline dequantizes INT4 weights into an FP16 matrix and calls cuBLAS, exactly as AutoAWQ does. In 20 rounds `gpt-5.6-luna` fused them into one kernel that scored 3.31× on the search cases; on the held-out Llama shapes it is **4.4× faster than the two-stage path at M = 1 and M = 3**, **3.45× and 3.41× as a geometric mean** over two reruns, with no shape slower than the baseline.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/awq-showcase-dark.svg">
-  <img src="docs/assets/awq-showcase-light.svg" alt="Bar chart of speedup over AutoAWQ's dequantize-then-cuBLAS path for 19 evaluated candidates. Round 1 reaches 5.59×, the best is 7.22× in round 17; round 7 regressed one case; three candidates failed to build or produced wrong results and were repaired in the next round." width="100%">
+  <img src="docs/assets/awq-showcase-light.svg" alt="Bar chart of speedup over AutoAWQ's dequantize-then-cuBLAS path for 20 rounds. Round 1 lost to the baseline; round 2 reaches 1.92×, round 12 2.33×, round 15 3.25×, round 20 3.31× which is the best; five candidates failed to build or produced wrong results and were repaired in the next round." width="100%">
 </picture>
 
 | Held-out case | AutoAWQ two-stage | KAI Pichu | Speedup | AutoAWQ fused kernel |
 | --- | --- | --- | --- | --- |
-| 1×11008×4096 | 0.428 ms | 0.052 ms | **8.2×** | 5.1× |
-| 2×4096×11008 | 0.605 ms | 0.066 ms | **9.1×** | 7.9× |
-| 3×5120×13824 | 0.959 ms | 0.125 ms | **7.7×** | 9.1× |
-| 8×4096×4096 | 0.158 ms | 0.196 ms | 0.80× | 3.3× |
+| 1×11008×4096 | 0.428 ms | 0.096 ms | **4.4×** | 5.1× |
+| 2×4096×11008 | 0.605 ms | 0.149 ms | **4.1×** | 7.9× |
+| 3×5120×13824 | 0.962 ms | 0.216 ms | **4.4×** | 9.1× |
+| 8×4096×4096 | 0.158 ms | 0.084 ms | **1.9×** | 3.3× |
 
-Accepted on two held-out reruns at a geometric mean of 4.4× and 4.5×. The `M = 8` shape was never in the search split and the kernel lost 20% there; the acceptance report lists it as a regression next to the mean instead of hiding it in the average. [Setup and per-round trajectory →](docs/showcase-awq-fusion.md)
+The judge's per-instruction stall attribution kept pointing at the same shuffle broadcast; replacing it with shared-memory staging and a `cp.async` pipeline took `M = 1` from 1.2× to 4.3× in three rounds. AutoAWQ's hand-written kernel is still ahead on every shape because it runs on tensor cores. [Setup and per-round trajectory →](docs/showcase-awq-fusion.md)
 
 ## What a run leaves behind
 
