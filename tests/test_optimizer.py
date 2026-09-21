@@ -1442,8 +1442,9 @@ def test_cases_to_profile_rotate_under_a_cap(task):
     assert loop._cases_to_profile(0, metrics) == ["a", "b"]
     assert loop._cases_to_profile(1, metrics) == ["c", "d"]
     assert loop._cases_to_profile(2, metrics) == ["e", "a"]
-    loop.config.profile = loop.config.profile.model_copy(update={"cases_per_round": None})
-    assert loop._cases_to_profile(7, metrics) == ["a", "b", "c", "d", "e"]
+    values["profile"] = {"enabled": False}
+    uncapped = OptimizationLoop(Workspace.create(manifest, output / "uncapped"), OptimizeConfig.model_validate(values))
+    assert uncapped._cases_to_profile(7, metrics) == ["a", "b", "c", "d", "e"]
 
 
 def test_queries_are_routed_by_case_and_fan_out_to_all_cases(task, monkeypatch):
