@@ -73,13 +73,17 @@ PROFILES: dict[str, Profile] = {
 }
 
 # (profile, seed, batch, heads, seq, causal). head_dim is fixed by the task.
-# Acceptance uses profiles, seeds and shapes that search never sees.
+# Acceptance uses seeds and shapes that search never sees, but search spans the same
+# ranges: every value profile, both causal flags, batch 1-4, heads 16-32, seq 2048-8192
+# including a length that is not a multiple of common tile sizes.
 # Shapes are LLM-scale so that one invocation takes milliseconds; sub-millisecond
 # kernels are dominated by launch and clock noise on most machines.
 SPLITS: dict[str, list[tuple[str, int, int, int, int, bool]]] = {
     "smoke": [("unit_normal", 0, 1, 8, 2048, False)],
     "search": [("unit_normal", 11, 2, 16, 4096, False),
-               ("sharp_rows", 12, 2, 16, 4096, True)],
+               ("sharp_rows", 12, 1, 32, 2600, True),
+               ("shifted_keys", 13, 4, 16, 2048, True),
+               ("spiky_values", 14, 1, 16, 8192, False)],
     "acceptance": [("unit_normal", 1001, 2, 16, 4096, True),
                    ("shifted_keys", 1002, 2, 16, 4096, False),
                    ("sharp_rows", 1003, 1, 32, 3000, True),

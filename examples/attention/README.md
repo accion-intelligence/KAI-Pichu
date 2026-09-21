@@ -24,7 +24,7 @@ Shapes and masks differ across cases; `head_dim` is the only fixed dimension.
 | Split | Cases |
 | --- | --- |
 | smoke | 1×8×2048, full attention |
-| search | 2×16×4096 full attention; 2×16×4096 causal with sharply peaked rows |
+| search | 2×16×4096 full; 1×32×2600 causal with peaked rows; 4×16×2048 causal with shared key offsets; 1×16×8192 full with heavy-tailed values |
 | acceptance | 2×16×4096 causal; 2×16×4096 full with large shared key offsets; 1×32×3000 causal with peaked rows; 4×16×2048 full with heavy-tailed values; 1×16×8192 causal |
 
 Shapes are LLM-scale (the range the cuDNN frontend attention benchmark uses) so
@@ -34,7 +34,8 @@ launch and clock noise.
 The value profiles are chosen so that a kernel without a stable softmax, a
 kernel that ignores the mask, a kernel that assumes tile-aligned `seq`, a kernel
 that accumulates in FP16, or a kernel that specializes to one shape fails
-validation. Acceptance profiles, seeds and shapes are held out from search.
+validation. Acceptance seeds and shapes are held out from search, and search spans
+the same ranges of batch, heads, sequence length, causal flag and value profile.
 
 ## Correctness
 
