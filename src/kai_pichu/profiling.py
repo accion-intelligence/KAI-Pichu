@@ -49,6 +49,9 @@ DIAGNOSTICS = [
 
 class ProfileQuery(ConfigModel):
     operation: Literal["launches", "catalog", "metrics", "rules", "source-metrics", "warp-stalls", "disasm"]
+    case_id: str | None = Field(default=None, max_length=200, description=(
+        "Which search case's report answers this query. Omit for hardware_feedback.default_case; "
+        "\"all\" sends the same query to every case (metrics, catalog, rules, warp-stalls, launches)"))
     row_id: str = Field(default="launch:0", pattern=r"^launch:[0-9]+$")
     query: str = Field(default="", max_length=300, description="Case-insensitive words in metric name/description")
     counter: str | None = Field(default=None, max_length=300,

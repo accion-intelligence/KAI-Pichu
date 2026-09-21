@@ -79,7 +79,8 @@ Edit the exported file:
 | `budget` | Rounds, model calls, total time, per-evaluation timeout, acceptance repeats |
 | `generator.max_continuations` | When a reply is cut off by `max_tokens`, the loop asks the model to continue it up to this many times (default 2) and splices the pieces; each continuation is a model call |
 | `profile.enabled` | Set `true` to collect NCU evidence when your environment supports it |
-| `profile.case_id` | Pin the search case NCU captures; by default it follows the case with the lowest measured speedup |
+| `profile.cases_per_round` | How many search cases NCU captures per round; default all of them, fewer rotate round by round |
+| `profile.case_id` | Pin NCU to one search case instead |
 
 The exported default key-variable name is `KAI_PICHU_API_KEY`. Set it securely in your environment, or change `api_key_env` to an existing key-variable name. For a local endpoint that needs no authentication, set `api_key_env: ""`. Do not place secrets in the task or commit them to source control.
 

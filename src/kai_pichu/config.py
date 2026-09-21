@@ -79,6 +79,9 @@ class ProfileConfig(ConfigModel):
         "SpeedOfLight", "LaunchStats", "Occupancy", "MemoryWorkloadAnalysis",
         "SchedulerStats", "WarpStateStats", "ComputeWorkloadAnalysis", "InstructionStats", "SourceCounters",
     ])
+    cases_per_round: int | None = Field(default=None, ge=1, description=(
+        "How many search cases to profile each round; default every case. When fewer, cases rotate "
+        "round by round so each one is captured in turn"))
     import_source: bool = Field(default=True, description=(
         "Pass --import-source yes so per-instruction counters and warp-stall samples map to source lines "
         "when the kernel was built with -lineinfo"))

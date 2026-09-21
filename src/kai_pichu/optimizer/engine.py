@@ -26,6 +26,15 @@ from .continuation import splice
 from .prompts import GENERATOR, OPTIMIZATION_JUDGE, REPAIR_JUDGE, continuation_messages, messages, strategy
 
 
+def _case_view(profile: dict[str, Any]) -> dict[str, Any]:
+    """What the judge sees of one capture: status, identity and the evidence overview, without the process log."""
+    view = {key: profile.get(key) for key in ("status", "profile_id", "case_selection", "query_available")}
+    evidence = dict(profile.get("evidence") or {})
+    evidence.pop("diagnostics", None)  # identical for every case; the parent carries it once
+    view["evidence"] = evidence
+    return view
+
+
 class StopRun(RuntimeError):
     def __init__(self, status: str, message: str):
         super().__init__(message)
@@ -178,8 +187,7 @@ class OptimizationLoop:
                    "history": history_tables(self.state["history"])}
         if current is not None:
             if not repair:
-                context["hardware_feedback"] = self._profile(f"round-{index:04d}", anchor_path,
-                                                             weakest_case(anchor["metrics"]), "lowest_measured_speedup")
+                context["hardware_feedback"] = self._profile_cases(index, anchor_path, anchor)
                 if anchor["id"] != current["id"]:  # the last candidate completed but failed the eligibility rules
                     context["last_attempt"] = self._attempt_evidence(index, current, anchor)
                 best = self.state["best"]
@@ -241,11 +249,48 @@ class OptimizationLoop:
 
     def _profile(self, tag: str, path: Path, case: str | None, policy: str) -> dict[str, Any]:
         profile = self.evaluator.profile(tag, path, timeout=min(self.config.budget.evaluation_seconds, self._remaining()),
-                                         weakest_case=case, policy=policy)
+                                         case_id=case, policy=policy)
         self._verify()
         if profile.get("process", {}).get("status") in ("resource_busy", "resource_error"):
             raise StopRun(profile["process"]["status"], "resource conflict during profiling")
         return profile
+
+    def _cases_to_profile(self, index: int, metrics: dict[str, Any]) -> list[str]:
+        """The search cases captured this round: all of them, or a rotating window of cases_per_round."""
+        cases = sorted((metrics.get("objective") or {}).get("per_case") or {})
+        cap = self.config.profile.cases_per_round
+        if not cases or cap is None or cap >= len(cases):
+            return cases
+        start = (index * cap) % len(cases)
+        return [cases[(start + offset) % len(cases)] for offset in range(cap)]
+
+    def _profile_cases(self, index: int, path: Path, anchor: dict[str, Any]) -> dict[str, Any]:
+        """One NCU capture per search case, so the judge chooses which shape's evidence to pursue.
+
+        The harness does not rank cases by importance; that is the task's and
+        the model's call. Every case's overview travels with the context, and a
+        query names the case it addresses (or all of them).
+        """
+        cases = self._cases_to_profile(index, anchor["metrics"])
+        if not cases:
+            profile = self._profile(f"round-{index:04d}", path, None, "first_search_case")
+            cases_out = [{"case_id": profile.get("case_selection", {}).get("case_id"), **_case_view(profile)}]
+        else:
+            cases_out = []
+            for case in cases:
+                profile = self._profile(f"round-{index:04d}/{case}", path, case, "every_search_case")
+                cases_out.append({"case_id": case, **_case_view(profile)})
+        weakest = weakest_case(anchor["metrics"])
+        available = [c["case_id"] for c in cases_out if c.get("query_available")]
+        return {
+            "cases": cases_out,
+            "default_case": weakest if weakest in available else (available[0] if available else None),
+            "query_available": bool(available),
+            "diagnostics": next((c.get("evidence", {}).get("diagnostics") for c in cases_out
+                                 if c.get("evidence", {}).get("diagnostics")), None),
+            "note": "One capture of the current sources per search case. Each entry holds that case's launches, "
+                    "headline metrics, rule count and stall summary; a query names its case_id, or \"all\".",
+        }
 
     def _attempt_evidence(self, index: int, attempt: dict[str, Any], anchor: dict[str, Any]) -> dict[str, Any]:
         """Measurements and a profile of the last candidate that ran but failed the eligibility rules.
@@ -339,9 +384,32 @@ class OptimizationLoop:
             context["strategy_error"]["final_message"] = str(error)[:1000]
             return None
 
+    FAN_OUT_OPERATIONS = {"launches", "catalog", "metrics", "rules", "warp-stalls"}
+
+    def _route_query(self, request: Any, profiles: dict[str, dict[str, Any]], default_case: str | None,
+                     *, timeout: float) -> dict[str, Any]:
+        """Send one judge query to the named case's report, or fan it out to every case."""
+        if not isinstance(request, dict):
+            return {"status": "unavailable", "error": {"message": "each query must be an object"}}
+        case = request.get("case_id") or default_case
+        body = {key: value for key, value in request.items() if key != "case_id"}
+        if case == "all":
+            if body.get("operation") not in self.FAN_OUT_OPERATIONS:
+                return {"status": "unavailable", "case_id": "all", "error": {"message":
+                        f"case_id \"all\" supports {sorted(self.FAN_OUT_OPERATIONS)}; name one case for {body.get('operation')!r}"}}
+            body["limit"] = min(int(body.get("limit", 20) or 20), 10)
+            per_case = [{"case_id": name, **self.evaluator.query_profile(entry["profile_id"], dict(body), timeout=timeout)}
+                        for name, entry in profiles.items()]
+            return {"status": "available", "case_id": "all", "fan_out": per_case}
+        if case not in profiles:
+            return {"status": "unavailable", "case_id": case,
+                    "error": {"message": f"no queryable profile for case {case!r}; available: {sorted(profiles)}"}}
+        return {"case_id": case, **self.evaluator.query_profile(profiles[case]["profile_id"], body, timeout=timeout)}
+
     def _diagnose(self, index: int, context: dict[str, Any]) -> dict[str, Any]:
         settings = self.config.profile
         profile = context.get("hardware_feedback", {})
+        profiles = {entry["case_id"]: entry for entry in profile.get("cases", []) if entry.get("query_available")}
         query_round = 0
         while True:
             # Evidence queries must leave room for this decision/generation and
@@ -395,8 +463,8 @@ class OptimizationLoop:
                     # Validate the same source anchor before and after report queries.
                     anchor = self.state.get("latest_eligible") or self.state["current"]
                     self._path(anchor)
-                    results.append(self.evaluator.query_profile(profile["profile_id"], request,
-                        timeout=min(settings.query_seconds, self._remaining())))
+                    results.append(self._route_query(request, profiles, profile.get("default_case"),
+                                                     timeout=min(settings.query_seconds, self._remaining())))
                     self._path(anchor)
                     self._verify()
             record = {"round": query_round, "requests": requests, "results": results}

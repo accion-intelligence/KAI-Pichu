@@ -498,14 +498,15 @@ def test_search_builds_on_the_latest_eligible_candidate_and_shows_the_best(task,
 
     def profile(tag, candidate, **kwargs):
         profiled.append((tag, candidate))
-        return {"status": "test_diagnostic", "source": (candidate / "solution.py").read_text()}
+        return {"status": "test_diagnostic", "evidence": {"source": (candidate / "solution.py").read_text()}}
 
     monkeypatch.setattr(loop.evaluator, "profile", profile)
     assert loop.run()["final_accepted"]
     # Round 2 (cost 8) scored below round 1 (cost 5) but passed every rule, so
     # round 3 builds on it: no harness judgment between two eligible candidates.
+    # Every search case is captured each round (this task's search split has one), on that round's anchor.
     tags = [tag for tag, _ in profiled]
-    assert tags == ["round-0001", "round-0002"] and profiled[0][1] != profiled[1][1]
+    assert tags == ["round-0001/one", "round-0002/one"] and profiled[0][1] != profiled[1][1]
     assert (profiled[1][1] / "solution.py").read_text().endswith("COST = 8\n")
     requests = [json.loads(path.read_text()) for path in sorted((output / "llm").glob("*.request.json"))]
     contexts = [json.loads(r["messages"][-1]["content"]) for r in requests if r["role"] == "judge"]
@@ -519,7 +520,7 @@ def test_search_builds_on_the_latest_eligible_candidate_and_shows_the_best(task,
     for request in requests:
         if request["role"] == "judge":
             context = json.loads(request["messages"][1]["content"])
-            assert context["current_sources"]["solution.py"] == context["hardware_feedback"]["source"]
+            assert context["current_sources"]["solution.py"] == context["hardware_feedback"]["cases"][0]["evidence"]["source"]
 
 
 def test_resource_monitor_overrides_child_accepted_report(task, monkeypatch):
@@ -1071,7 +1072,7 @@ def test_weakest_case_is_the_lowest_per_case_speedup():
     assert weakest_case({"status": "error"}) is None
 
 
-def test_profile_captures_the_weakest_case_unless_a_case_is_pinned(task, monkeypatch):
+def test_profile_captures_the_named_case_unless_a_case_is_pinned(task, monkeypatch):
     from kai_pichu import evaluator
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
@@ -1087,8 +1088,8 @@ def test_profile_captures_the_weakest_case_unless_a_case_is_pinned(task, monkeyp
 
     monkeypatch.setattr(evaluator, "run_process", fake_ncu)
     profiler = evaluator.Evaluator(workspace, OptimizeConfig.model_validate(values))
-    result = profiler.profile("weakest", workspace.baseline, timeout=5, weakest_case="two")
-    assert result["case_selection"] == {"case_id": "two", "policy": "lowest_measured_speedup"}
+    result = profiler.profile("weakest", workspace.baseline, timeout=5, case_id="two")
+    assert result["case_selection"] == {"case_id": "two", "policy": "every_search_case"}
     assert commands[-1][commands[-1].index("--case") + 1] == "two"
 
     result = profiler.profile("default", workspace.baseline, timeout=5)
@@ -1097,7 +1098,7 @@ def test_profile_captures_the_weakest_case_unless_a_case_is_pinned(task, monkeyp
 
     values["profile"]["case_id"] = "one"
     pinned = evaluator.Evaluator(workspace, OptimizeConfig.model_validate(values))
-    result = pinned.profile("pinned", workspace.baseline, timeout=5, weakest_case="two")
+    result = pinned.profile("pinned", workspace.baseline, timeout=5, case_id="two")
     assert result["case_selection"] == {"case_id": "one", "policy": "configured"}
     assert commands[-1][commands[-1].index("--case") + 1] == "one"
 
@@ -1138,7 +1139,7 @@ def test_history_tables_only_list_recent_rounds_but_track_cases_over_all(monkeyp
     # Gains inside the jitter tolerance do not restart the stall counter.
     jitter = [_completed_round(0, 3.57, {"only": 3.57}, "a"), _completed_round(1, 3.58, {"only": 3.58}, "b"),
               _completed_round(2, 3.56, {"only": 3.56}, "c")]
-    assert "| only | 3.58x | 1 | 2 | 3.56x |" in history.history_tables(jitter)
+    assert "| only | 3.57x | 1 | 2 | 3.56x |" in history.history_tables(jitter)
 
 
 def test_judge_request_carries_history_tables_with_the_previous_diagnosis(task, monkeypatch):
@@ -1178,7 +1179,7 @@ def test_judge_sees_the_failed_attempt_with_its_own_profile(task, monkeypatch):
     loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
     monkeypatch.setattr(loop.evaluator, "profile", lambda tag, candidate, **kw: {
         "status": "profiled", "case_selection": {"case_id": kw.get("weakest_case"), "policy": kw.get("policy")},
-        "evidence": {"status": "available", "tag": tag}, "workload": {}})
+        "evidence": {"status": "available", "tag": tag}, "workload": {}, "query_available": True})
     assert loop.run()["final_accepted"]
     requests = [json.loads(path.read_text()) for path in sorted((output / "llm").glob("*.request.json"))]
     contexts = [json.loads(r["messages"][-1]["content"]) for r in requests if r["role"] == "judge"]
@@ -1188,7 +1189,9 @@ def test_judge_sees_the_failed_attempt_with_its_own_profile(task, monkeypatch):
     assert attempt["feedback"]["status"] == "completed"
     assert attempt["hardware_feedback"]["case_selection"]["policy"] == "lowest_speedup_relative_to_anchor"
     assert attempt["hardware_feedback"]["evidence"]["tag"] == "round-0002-attempt"
-    assert contexts[1]["hardware_feedback"]["evidence"]["tag"] == "round-0002"
+    feedback = contexts[1]["hardware_feedback"]
+    assert [entry["case_id"] for entry in feedback["cases"]] == ["one"]
+    assert feedback["cases"][0]["evidence"]["tag"] == "round-0002/one" and feedback["query_available"] is True
 
 
 def test_strategy_accepts_an_optional_integer_base_round():
@@ -1409,3 +1412,59 @@ def test_persistent_guard_failures_still_report_a_resource_error(tmp_path, monke
     # The device could not be inspected even before launch, so nothing was started.
     assert result["status"] == "resource_error" and "nvidia-smi unusable" in result["message"]
     assert not (tmp_path / "bad.log").exists()
+
+
+def test_history_cells_carry_intervals_and_flag_noisy_cases():
+    from kai_pichu.optimizer.history import history_tables
+    row = _completed_round(0, 2.0, {"steady": 2.5, "jittery": 1.8}, "seed")
+    row["metrics"]["acceptance"]["case_speedups"] = {
+        "steady": {"speedup": 2.5, "interval": [2.45, 2.55]},
+        "jittery": {"speedup": 1.8, "interval": [1.5, 2.1]}}
+    text = history_tables([row])
+    assert "| 2.50x [2.45, 2.55] |" in text
+    assert "| 1.80x [1.50, 2.10] ~ |" in text
+    assert "wider than 15%" in text
+    # A later value inside the previous best's interval is not an improvement.
+    later = _completed_round(1, 2.05, {"steady": 2.52, "jittery": 2.0}, "tweak")
+    later["metrics"]["acceptance"]["case_speedups"] = {
+        "steady": {"speedup": 2.52, "interval": [2.47, 2.57]}, "jittery": {"speedup": 2.0, "interval": [1.7, 2.3]}}
+    table = history_tables([row, later])
+    assert "| jittery | 1.80x | 1 | 1 | 2.00x |" in table  # 2.0 lies inside [1.5, 2.1]
+    assert "| steady | 2.50x | 1 | 1 | 2.52x |" in table    # 2.52 lies inside [2.45, 2.55]
+
+
+def test_cases_to_profile_rotate_under_a_cap(task):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["profile"] = {"enabled": False, "cases_per_round": 2}
+    loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
+    metrics = {"objective": {"per_case": {c: {} for c in ("a", "b", "c", "d", "e")}}}
+    assert loop._cases_to_profile(0, metrics) == ["a", "b"]
+    assert loop._cases_to_profile(1, metrics) == ["c", "d"]
+    assert loop._cases_to_profile(2, metrics) == ["e", "a"]
+    loop.config.profile = loop.config.profile.model_copy(update={"cases_per_round": None})
+    assert loop._cases_to_profile(7, metrics) == ["a", "b", "c", "d", "e"]
+
+
+def test_queries_are_routed_by_case_and_fan_out_to_all_cases(task, monkeypatch):
+    manifest, config_path, output = task
+    loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(yaml.safe_load(config_path.read_text())))
+    seen = []
+
+    def query_profile(profile_id, request, *, timeout):
+        seen.append((profile_id, dict(request)))
+        return {"status": "available", "data": {"rows": [{"profile": profile_id}]}}
+
+    monkeypatch.setattr(loop.evaluator, "query_profile", query_profile)
+    profiles = {"small": {"profile_id": "p-small"}, "large": {"profile_id": "p-large"}}
+    single = loop._route_query({"operation": "metrics", "counter": "x", "case_id": "large"}, profiles, "small", timeout=5)
+    assert single["case_id"] == "large" and seen[-1] == ("p-large", {"operation": "metrics", "counter": "x"})
+    default = loop._route_query({"operation": "rules"}, profiles, "small", timeout=5)
+    assert default["case_id"] == "small" and seen[-1][0] == "p-small"
+    everywhere = loop._route_query({"operation": "warp-stalls", "by": "reason", "case_id": "all", "limit": 40}, profiles, "small", timeout=5)
+    assert [entry["case_id"] for entry in everywhere["fan_out"]] == ["small", "large"]
+    assert all(request["limit"] == 10 for _, request in seen[-2:])  # fan-out pages are kept small
+    refused = loop._route_query({"operation": "disasm", "case_id": "all"}, profiles, "small", timeout=5)
+    assert refused["status"] == "unavailable" and "name one case" in refused["error"]["message"]
+    unknown = loop._route_query({"operation": "rules", "case_id": "huge"}, profiles, "small", timeout=5)
+    assert unknown["status"] == "unavailable" and "available: ['large', 'small']" in unknown["error"]["message"]

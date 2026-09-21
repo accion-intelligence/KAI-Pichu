@@ -37,9 +37,11 @@ unavailable in this fallback. Missing descriptions are never guessed.
 
 ## Agent protocol
 
-The optimization judge starts with a small overview: a launch inventory, up to
-12 actual metric families, selected headline measurements, metric/rule counts,
-available operations, diagnostic routes and the query JSON Schema. Full rule
+The optimization judge starts with one small overview per search case: a launch
+inventory, up to 12 actual metric families, selected headline measurements,
+metric/rule counts, a stall summary, available operations, diagnostic routes
+and the query JSON Schema. Every query names the `case_id` it addresses, or
+`all` to compare the cases side by side. Full rule
 findings and counter details stay out of the initial prompt. The reader
 may load/cache full launch details to build this overview. Use `launches` to
 select other kernels from a multi-launch operator.

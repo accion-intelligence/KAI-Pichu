@@ -73,36 +73,46 @@ kind: fusion task the objective is fewer launches without materializing the
 intermediates; a per-shape fallback to the unfused path is a stopgap, and the
 table should show attempts to fuse that shape.
 
-Evidence. hardware_feedback is the NCU profile of current_sources on one
-search case (case_selection names it); the profile and the source must refer
-to the same implementation and case. Its overview holds the launches, headline
-measurements, rule_count, available_operations and, when the capture sampled
-warps, stall_summary: total samples, the top stall reasons and the hottest
-instructions with their SASS, source file and line. Read stall_summary before
-diagnosing an issue- or latency-bound kernel, and cite the instruction and line.
-Before stating that evidence is missing, check available_operations and
-stall_summary.status; "unverified" is for evidence the capture truly lacks.
+Evidence. hardware_feedback.cases holds one NCU capture of current_sources per
+search case: its launches, headline measurements, rule_count,
+available_operations and, when the capture sampled warps, stall_summary (total
+samples, top stall reasons, hottest instructions with SASS, source file and
+line). Compare the cases before choosing where to work: the same code may be
+bound differently on different shapes, and the history table tells you which
+cases have stalled and which measurements are noisy. Before stating that
+evidence is missing, check available_operations and stall_summary.status;
+"unverified" is for evidence the capture truly lacks.
+State the level of your hypothesis and match the evidence to it: work
+distribution and data reuse (grid, tile, outputs per thread, what is staged
+where) are read from launches, occupancy, throughput and memory traffic;
+instruction-level effects (which instruction stalls, on what) are read from
+stall_summary, warp-stalls and source-metrics. Instruction-level evidence tells
+where a kernel waits, not whether it does the right amount of work per thread.
 Choose one diagnostic question, request only the evidence that answers it, read
-the results, then decide whether another query is worth a model call. Routes:
-rules for NVIDIA's findings; catalog to discover metric names and descriptions
-(all search words must match; search one concept at a time); metrics for values,
-with counter set to an exact discovered name or one glob; warp-stalls --by
-line|sass|reason and source-metrics --by line|sass|file for code-level
-attribution; disasm for SASS/PTX. Keep row_id explicit; one operator may launch
-several kernels. Missing descriptions, missing counters, skipped_counters and
-unattributed samples are limitations, not zero measurements. Do not sum
-unrelated counters. Every query reads the same existing report; it cannot
-collect missing data. Respect profile_query.enabled and remaining_rounds; the
-loop reserves calls for the diagnosis and the generation.
+the results, then decide whether another query is worth a model call. Each
+query names its case_id (omit for hardware_feedback.default_case; "all" fans
+the same catalog, metrics, rules, launches or warp-stalls query out to every
+case for a side-by-side comparison). Routes: rules for NVIDIA's findings;
+catalog to discover metric names and descriptions (all search words must
+match; search one concept at a time); metrics for values, with counter set to
+an exact discovered name or one glob; warp-stalls --by line|sass|reason and
+source-metrics --by line|sass|file for code-level attribution; disasm for
+SASS/PTX. Keep row_id explicit; one operator may launch several kernels.
+Missing descriptions, missing counters, skipped_counters and unattributed
+samples are limitations, not zero measurements. Do not sum unrelated counters.
+Every query reads the same existing reports; it cannot collect missing data.
+Respect profile_query.enabled and remaining_rounds; the loop reserves calls for
+the diagnosis and the generation.
 If more evidence is useful and requests remain, return ONLY:
 {"action": "query_profile", "question": "Which collected counters can test the memory-traffic hypothesis?",
- "queries": [{"operation": "catalog", "query": "memory",
+ "queries": [{"operation": "catalog", "query": "memory", "case_id": "all",
  "row_id": "launch:0", "offset": 0, "limit": 10}]}
 using profile_query.schema; copy data.next_query for another page. When queries
 are unavailable, exhausted or unnecessary, return ONLY:
 {"bottleneck": "...", "optimization_method": "...",
 "modification_plan": "...", "base_round": n}
-with base_round optional."""
+with base_round optional. In bottleneck, name the case whose evidence you rely
+on and the level of the hypothesis."""
 
 
 CONTINUATION = """Your previous reply was cut off by the output limit. It ends with:
