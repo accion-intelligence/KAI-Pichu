@@ -25,7 +25,12 @@ def main(argv: list[str] | None = None) -> int:
     skill = commands.add_parser("skill", help="Install the packaged task-authoring skill for a coding agent")
     skill_commands = skill.add_subparsers(dest="skill_command", required=True)
     install = skill_commands.add_parser("install", help="Copy the kai-benchmark skill into an agent's skills directory")
-    install.add_argument("--agent", choices=("claude", "codex", "all"), default="all")
+    # The agent reads as a positional in the help text, so accept it that way.
+    # --agent keeps working; naming it twice is an error rather than a silent win.
+    install.add_argument("agent", nargs="?", choices=("claude", "codex", "all"), default=None,
+                         help="claude, codex or all (default: all); --agent is equivalent")
+    install.add_argument("--agent", dest="agent_option", choices=("claude", "codex", "all"), default=None,
+                         help=argparse.SUPPRESS)
     install.add_argument("--scope", choices=("project", "user"), default="project",
                          help="project: ./.claude/skills or ./.codex/skills; user: the same under your home directory")
     install.add_argument("--directory", type=Path, help="Project root for --scope project (default: current directory)")
@@ -77,7 +82,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.skill_command == "path":
                 print(skill_source())
                 return 0
-            agents = sorted(AGENT_SKILL_DIRS) if args.agent == "all" else [args.agent]
+            if args.agent is not None and args.agent_option is not None and args.agent != args.agent_option:
+                raise ValueError(f"agent given twice and they disagree: {args.agent!r} and {args.agent_option!r}")
+            selected = args.agent or args.agent_option or "all"
+            agents = sorted(AGENT_SKILL_DIRS) if selected == "all" else [selected]
             for agent in agents:
                 destination = install_skill(agent, scope=args.scope, root=args.directory, force=args.force)
                 print(f"Installed {agent} skill: {destination}")

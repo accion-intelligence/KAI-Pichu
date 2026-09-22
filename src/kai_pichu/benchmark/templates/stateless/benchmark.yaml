@@ -1,6 +1,6 @@
 schema_version: 1
 name: vector_add
-description: Elementwise FP32 addition, including output allocation and excluding input creation.
+description: "Elementwise FP32 addition, including output allocation and excluding input creation."
 adapter: adapter.py:Task
 implementation:
   root: .
