@@ -204,11 +204,12 @@ If KAI Pichu supports your work, please cite the relevant papers:
 }
 
 @inproceedings{li2026stitchcuda,
-  title = {StitchCUDA: An Automated Multi-Agents End-to-End GPU Programming Framework with Rubric-based Agentic Reinforcement Learning},
-  author = {Shiyang Li and Zijian Zhang and Winson Chen and Yuebo Luo and Mingyi Hong and Caiwen Ding},
-  booktitle = {International Conference on Machine Learning (ICML)},
-  year = {2026},
-  url = {https://icml.cc/virtual/2026/poster/64924}
+  li2026stitchcuda,
+title={Stitch{CUDA}: An Automated Multi-Agents End-to-End {GPU} Programing Framework with Rubric-based Agentic Reinforcement Learning},
+author={Shiyang Li and Zijian Zhang and Winson Chen and Yuebo Luo and Mingyi Hong and Caiwen Ding},
+booktitle={Forty-third International Conference on Machine Learning},
+year={2026},
+url={https://openreview.net/forum?id=Id4iwq3dnF}
 }
 
 @misc{li2026cudahercules,
