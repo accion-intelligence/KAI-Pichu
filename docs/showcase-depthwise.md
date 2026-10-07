@@ -19,7 +19,7 @@ let it run for 13 rounds.
 
 ## Setup
 
-NVIDIA GeForce RTX 5070, CUDA 12.9, PyTorch 2.8 with cuDNN 9.10. Generator and
+NVIDIA GeForce RTX 5070, CUDA 12.9, PyTorch 2.8 with cuDNN 9.10. Coder and
 judge: `gpt-5.6-luna` through the OpenAI Responses API at reasoning effort
 `xhigh`. The search split at the time had two cases, 8×256×56×56 and
 4×512×28×28, so several held-out shapes below lay outside it; the packaged
@@ -50,8 +50,8 @@ the FP32 reference rounded to FP16 with zero error on every case.
 
 The trajectory is the point of the tool, not the final number:
 
-1. *Round 1 (1.96×).* The generator replaced cuDNN's generic IMPLICIT_GEMM path with a custom NCHW kernel that stages each plane's 7×7 halo in a shared-memory FP32 tile through alignment-checked `half2` loads, keeping cuDNN only for tiny shapes.
-2. *Round 2 (3.52×).* The judge read the NCU profile of round 1: 88% SM throughput, 96% active warps, shared-memory read throughput near zero. Its diagnosis was that the 49-tap FMA loop was issue-bound, not memory-bound, and it asked for register blocking. The generator made each thread compute two adjacent outputs from the same shared rows, with an odd tile pitch to avoid bank conflicts.
+1. *Round 1 (1.96×).* The coder replaced cuDNN's generic IMPLICIT_GEMM path with a custom NCHW kernel that stages each plane's 7×7 halo in a shared-memory FP32 tile through alignment-checked `half2` loads, keeping cuDNN only for tiny shapes.
+2. *Round 2 (3.52×).* The judge read the NCU profile of round 1: 88% SM throughput, 96% active warps, shared-memory read throughput near zero. Its diagnosis was that the 49-tap FMA loop was issue-bound, not memory-bound, and it asked for register blocking. The coder made each thread compute two adjacent outputs from the same shared rows, with an odd tile pitch to avoid bank conflicts.
 3. *Round 3 (4.25×).* Same diagnosis, pushed further: four adjacent outputs per thread, so each filter row needs ten shared-memory reads for four dot products instead of twenty-eight, dispatched only where the wider tile fits.
 4. *Rounds 4 to 13.* Nine variants of that design (half2-packed halos, warp shuffles, eight-output blocking, `cp.async` double buffering, width-specific kernels) all measured between 3.65× and 4.20×; none displaced round 3. Two rounds failed to compile on undefined identifiers and were repaired in the following round from the compiler's own error text.
 

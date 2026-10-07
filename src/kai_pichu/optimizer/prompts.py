@@ -7,7 +7,7 @@ import json
 from typing import Any
 
 
-GENERATOR = """You optimize one GPU operator inside a frozen benchmark contract.
+CODER = """You optimize one GPU operator inside a frozen benchmark contract.
 Read its inputs, outputs, numerical requirements, measurement scope, baseline,
 editable files and feedback. Preserve the declared semantics and precision.
 Replace only declared implementation files. Never alter the benchmark, oracle,
@@ -57,7 +57,7 @@ source. last_attempt, when present, is the latest candidate that failed the
 rules, with its own measurements and profile overview. If an earlier round is
 the better base, read its code with {"action": "read_candidate", "rounds": [n]}
 (one evidence round, up to three rounds) and set "base_round": n in the final
-answer; the generator then modifies that round's code. Omit base_round to build
+answer; the coder then modifies that round's code. Omit base_round to build
 on current_sources. When the current code regressed several cases against the
 best, restore all of them, not only the one you diagnose.
 

@@ -39,7 +39,7 @@ class ModelReplyError(ValueError):
 
     Truncation, a content filter, an empty body or a response the provider marks
     incomplete all mean a call was made and produced something unusable. That is
-    the generator's existing repair case, not a transport fault, so it must reach
+    the coder's existing repair case, not a transport fault, so it must reach
     the caller instead of ending the run. A ValueError subclass so existing
     handlers keep working.
 

@@ -114,7 +114,7 @@ def truncating_task(tmp_path: Path):
     server, thread = serve(handler)
     config = tmp_path / "optimizer.yaml"
     config.write_text(yaml.safe_dump({
-        "generator": {"provider": "chat_completions", "model": "m", "api_key_env": "",
+        "coder": {"provider": "chat_completions", "model": "m", "api_key_env": "",
                       "base_url": f"http://127.0.0.1:{server.server_port}/v1"},
         # Round 1 repairs the truncated seed; round 2 optimizes. The judge's
         # contract differs between the two, so the replies must too.
@@ -147,7 +147,7 @@ def test_a_truncated_generation_is_continued_within_its_round(truncating_task):
 def test_without_continuation_a_truncated_generation_costs_one_round_not_the_run(truncating_task):
     manifest, config, output, sent = truncating_task
     values = yaml.safe_load(config.read_text())
-    values["generator"]["max_continuations"] = 0
+    values["coder"]["max_continuations"] = 0
     config.write_text(yaml.safe_dump(values))
     assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output)]) == 0
     state = json.loads((output / "state.json").read_text())
@@ -189,7 +189,7 @@ def test_the_anthropic_provider_keeps_configuration_errors_fatal():
 
 
 def test_the_shipped_default_token_budget_fits_a_whole_file_rewrite():
-    # The generator must return complete replacement text, and for a reasoning
+    # The coder must return complete replacement text, and for a reasoning
     # provider this budget is shared with thinking tokens.
     assert ModelConfig(model="m", api_key_env="", base_url="http://x/v1").max_tokens == 262144
 

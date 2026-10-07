@@ -72,12 +72,12 @@ Edit the exported file:
 
 | Setting | What to choose |
 | --- | --- |
-| `generator.provider` | `chat_completions` or `responses` for OpenAI-shaped endpoints; `anthropic` for Claude via the official SDK (`pip install 'kai-pichu[anthropic]'`, see `configs/claude_opus5_smoke.yaml`) |
-| `generator.model`, `generator.base_url` | Your model identifier and compatible API base URL |
-| `generator.api_key_env` | The name of the environment variable holding your key |
-| `judge` | Optional separate model configuration; omit to reuse the generator model |
+| `coder.provider` | `chat_completions` or `responses` for OpenAI-shaped endpoints; `anthropic` for Claude via the official SDK (`pip install 'kai-pichu[anthropic]'`, see `configs/claude_opus5_smoke.yaml`) |
+| `coder.model`, `coder.base_url` | Your model identifier and compatible API base URL |
+| `coder.api_key_env` | The name of the environment variable holding your key |
+| `judge` | Optional separate model configuration; omit to reuse the coder model |
 | `budget` | Rounds, model calls, total time, per-evaluation timeout, acceptance repeats |
-| `generator.max_continuations` | When a reply is cut off by `max_tokens`, the loop asks the model to continue it up to this many times (default 2) and splices the pieces; each continuation is a model call |
+| `coder.max_continuations` | When a reply is cut off by `max_tokens`, the loop asks the model to continue it up to this many times (default 2) and splices the pieces; each continuation is a model call |
 | `profile.enabled` | Set `true` to collect NCU evidence when your environment supports it |
 | `profile.cases_per_round` | How many search cases NCU captures per round; default all of them, fewer rotate round by round |
 | `profile.case_id` | Pin NCU to one search case instead |
@@ -115,6 +115,16 @@ python -m kai_pichu optimize /absolute/path/to/your-task/benchmark.yaml \
 ```
 
 To inspect the plan and the frozen task bundle without model calls or GPU work, add `--dry-run` (new output directory). It writes `plan.json` and the bundle; it does not prove that the task compiles or passes validation. A dry-run directory can then be executed with `--resume`.
+
+### Watch a run live
+
+In another terminal, serve the dashboard over the runs directory (or a single run directory) and open the printed address:
+
+```bash
+python -m kai_pichu dashboard runs            # http://127.0.0.1:8765/
+```
+
+It shows which role is working right now (NCU capture, judge, coder or SDK evaluation), the current round's pipeline, the judge's diagnosis and the coder's hypothesis for any round, speedup by round, per-case speedups with intervals, a session log and the budget. Click a round, or use ← →, to inspect it; Esc returns to the live round. The dashboard only reads the run directory and can be started and stopped at any time, including for finished runs. A run whose `state.json` still says `running` but whose process no longer holds the run lock is shown as stopped. It binds to localhost by default; run records include prompts and source, so forward the port over SSH rather than binding a public address.
 
 ## 5. Inspect the work
 

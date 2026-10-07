@@ -23,7 +23,7 @@ from ..workspace import Workspace
 from .history import case_lost_most, history_tables, weakest_case
 from .individual import KernelIndividual
 from .continuation import splice
-from .prompts import GENERATOR, OPTIMIZATION_JUDGE, REPAIR_JUDGE, continuation_messages, messages, strategy
+from .prompts import CODER, OPTIMIZATION_JUDGE, REPAIR_JUDGE, continuation_messages, messages, strategy
 
 
 def _case_view(profile: dict[str, Any]) -> dict[str, Any]:
@@ -59,8 +59,8 @@ class OptimizationLoop:
         self.workspace = workspace
         self.config = config
         self.evaluator = Evaluator(workspace, config)
-        self.clients = {"generator": ModelClient(config.generator),
-                        "judge": ModelClient(config.judge or config.generator)}
+        self.clients = {"coder": ModelClient(config.coder),
+                        "judge": ModelClient(config.judge or config.coder)}
         self.state: dict[str, Any] = {}
         self.started = 0.0
         self.previous_elapsed = 0.0
@@ -118,7 +118,7 @@ class OptimizationLoop:
         raise ModelReplyError(f"{cut_off}; still incomplete after {attempts} continuation(s)")
 
     def _model_config(self, role: str) -> Any:
-        return (self.config.judge or self.config.generator) if role == "judge" else self.config.generator
+        return (self.config.judge or self.config.coder) if role == "judge" else self.config.coder
 
     def _call(self, role: str, request: list[dict[str, str]], *, continuation: bool = False) -> dict[str, Any]:
         """Send one request under the model-call budget and record it under llm/."""
@@ -199,7 +199,7 @@ class OptimizationLoop:
                 anchor, anchor_path = self._starting_point(context, anchor, anchor_path)
         context["base_round"] = anchor["id"] + 1 if anchor else None
         try:
-            reply = self._model("generator", GENERATOR, context)
+            reply = self._model("coder", CODER, context)
             candidate = self.workspace.candidate(index, anchor_path, reply)
         except (ValueError, json.JSONDecodeError) as error:
             # Output-format repair has the same bounded round budget as CUDA repair.
@@ -331,7 +331,7 @@ class OptimizationLoop:
         row = self._saved_round(requested)
         if row is None:
             context["strategy_note"] = (f"base_round {requested} names no saved candidate; "
-                                        f"the generator builds on round {anchor['id'] + 1}")
+                                        f"the coder builds on round {anchor['id'] + 1}")
             return anchor, anchor_path
         path = self._path(row)
         context["current_sources"] = self.workspace.sources(path)
@@ -358,7 +358,7 @@ class OptimizationLoop:
 
         A reply that breaks the judge's own output contract is the judge's
         mistake, not the candidate's, and a run with rounds and budget left must
-        not end on it. The generator already works from feedback alone, so a
+        not end on it. The coder already works from feedback alone, so a
         second unusable reply degrades this round to unguided generation and
         leaves strategy_error in the recorded context.
         """
@@ -542,6 +542,9 @@ class OptimizationLoop:
             self.started = time.monotonic()
             if resume:
                 self.state = json.loads((root / "state.json").read_text())
+                role_calls = self.state["role_calls"]
+                if "generator" in role_calls:  # a run recorded before the coder role was renamed
+                    role_calls["coder"] = role_calls.pop("generator")
                 if self.state["status"] in ("accepted", "not_accepted", "no_improvement"):
                     # A finished search continues only with more rounds; the final acceptance is rerun afterwards.
                     if self.config.budget.rounds <= self.state["next_round"]:
@@ -556,7 +559,7 @@ class OptimizationLoop:
             else:
                 self.state = {"schema_version": 1, "status": "created", "config_fingerprint": config_fingerprint,
                               "frozen_fingerprint": self.workspace.fingerprint(), "next_round": 0,
-                              "llm_calls": 0, "role_calls": {"generator": 0, "judge": 0}, "evaluations": 0,
+                              "llm_calls": 0, "role_calls": {"coder": 0, "judge": 0}, "evaluations": 0,
                               "current": None, "best": None, "latest_eligible": None, "history": [], "usage": [],
                               "acceptance_reports": [], "elapsed_seconds": 0.0}
                 write_json(root / "config.json", self.config.model_dump())
@@ -565,7 +568,7 @@ class OptimizationLoop:
                 task_context = self.workspace.context(self.config.max_context_chars)
                 if dry_run:
                     write_json(root / "plan.json", {"backend": "kai_pichu.optimizer", "context": task_context,
-                                                   "first_request": messages(GENERATOR, task_context)}, replace=resume)
+                                                   "first_request": messages(CODER, task_context)}, replace=resume)
                     self.state["status"] = "planned"
                 else:
                     self.state["status"] = "running"

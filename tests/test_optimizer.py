@@ -64,7 +64,7 @@ def task(tmp_path: Path) -> tuple[Path, Path, Path]:
     manifest.write_text(yaml.safe_dump(spec))
     config = tmp_path / "optimizer.yaml"
     config.write_text(yaml.safe_dump({
-        "generator": {"provider": "replay", "responses": [reply(1, factor=0), reply(6), reply(5)]},
+        "coder": {"provider": "replay", "responses": [reply(1, factor=0), reply(6), reply(5)]},
         "judge": {"provider": "replay", "responses": [
             json.dumps({"critical_issue": "wrong factor", "why_it_matters": "output mismatch", "minimal_fix_hint": "restore factor"}),
             json.dumps({"bottleneck": "synthetic test", "optimization_method": "next fixture", "modification_plan": "lower synthetic cost"}),
@@ -111,6 +111,31 @@ def test_dry_run_has_no_evaluation_or_model_calls_and_can_resume(task, monkeypat
     assert not (output / "reports").exists()
     assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output), "--resume"]) == 0
     assert json.loads((output / "summary.json").read_text())["final_accepted"]
+
+
+def test_legacy_generator_config_key_is_read_as_coder():
+    config = OptimizeConfig.model_validate({"generator": {"provider": "replay", "responses": ["x"]}})
+    assert config.coder.responses == ["x"] and "generator" not in config.model_dump()
+    with pytest.raises(ValueError, match="legacy name generator"):
+        OptimizeConfig.model_validate({"generator": {"provider": "replay"}, "coder": {"provider": "replay"}})
+
+
+def test_a_run_recorded_with_the_generator_role_resumes(task):
+    manifest, config, output = task
+    assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output), "--dry-run"]) == 0
+    # Rewrite the run as it was recorded before the coder role was renamed.
+    state = json.loads((output / "state.json").read_text())
+    state["role_calls"] = {"generator": state["role_calls"].pop("coder"), **state["role_calls"]}
+    (output / "state.json").write_text(json.dumps(state))
+    recorded = json.loads((output / "config.json").read_text())
+    recorded["generator"] = recorded.pop("coder")
+    (output / "config.json").write_text(json.dumps(recorded))
+    legacy_config = yaml.safe_load(config.read_text())
+    legacy_config["generator"] = legacy_config.pop("coder")
+    config.write_text(yaml.safe_dump(legacy_config))
+    assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output), "--resume"]) == 0
+    state = json.loads((output / "state.json").read_text())
+    assert state["role_calls"] == {"coder": 3, "judge": 2} and state["status"] == "accepted"
 
 
 def test_resource_busy_preflight_uses_no_model_budget(task, monkeypatch):
@@ -190,7 +215,7 @@ def test_runtime_benchmark_mutation_invalidates_run(task):
     manifest, config, output = task
     value = yaml.safe_load(config.read_text())
     code = "from pathlib import Path\np = Path(__file__).parents[2] / 'bundle/adapter.py'\np.write_text(p.read_text() + '\\n# changed')\nFACTOR = 1\nCOST = 1\n"
-    value["generator"]["responses"] = [json.dumps({"hypothesis": "invalid runtime mutation", "files": {"solution.py": code}})]
+    value["coder"]["responses"] = [json.dumps({"hypothesis": "invalid runtime mutation", "files": {"solution.py": code}})]
     value["budget"]["rounds"] = 1
     config.write_text(yaml.safe_dump(value))
     assert main(["optimize", str(manifest), "--config", str(config), "--output", str(output)]) == 1
@@ -474,7 +499,7 @@ def test_config_template_and_schema_export_without_overwriting(tmp_path):
     assert main(["config", "--output", str(output)]) == 2
     schema = tmp_path / "schema.json"
     assert main(["config", "--schema", "--output", str(schema)]) == 0
-    assert "generator" in json.loads(schema.read_text())["properties"]
+    assert "coder" in json.loads(schema.read_text())["properties"]
 
 
 def test_resume_rejects_changed_frozen_benchmark(task):
@@ -490,7 +515,7 @@ def test_resume_rejects_changed_frozen_benchmark(task):
 def test_search_builds_on_the_latest_eligible_candidate_and_shows_the_best(task, monkeypatch):
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
-    values["generator"]["responses"] = [reply(5), reply(8), reply(4)]
+    values["coder"]["responses"] = [reply(5), reply(8), reply(4)]
     opt = json.dumps({"bottleneck": "test", "optimization_method": "test", "modification_plan": "test"})
     values["judge"]["responses"] = [opt, opt]
     loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
@@ -661,7 +686,7 @@ def test_on_demand_evidence_can_take_four_steps_and_reserves_future_iterations(t
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
     final = values["judge"]["responses"][-1]
-    values["generator"]["responses"] = [reply(6), reply(5), reply(4)]
+    values["coder"]["responses"] = [reply(6), reply(5), reply(4)]
     queries = [
         {"operation": "catalog", "query": "dram", "limit": 1, "fields": ["name"]},
         {"operation": "catalog", "query": "dram", "limit": 1, "offset": 1, "fields": ["name"]},
@@ -697,9 +722,9 @@ def test_on_demand_evidence_can_take_four_steps_and_reserves_future_iterations(t
     assert records[0]["results"][0]["data"]["next_query"]["offset"] == 1
     last_value = records[-1]["results"][0]["data"]["rows"][0]
     assert last_value["value"] == 1024 and last_value["unit"] == "byte" and "description" not in last_value
-    generator_request = json.loads((output / "llm/call-0006.request.json").read_text())
-    generator_context = json.loads(generator_request["messages"][1]["content"])
-    assert generator_context["profile_query_results"] == records
+    coder_request = json.loads((output / "llm/call-0006.request.json").read_text())
+    coder_context = json.loads(coder_request["messages"][1]["content"])
+    assert coder_context["profile_query_results"] == records
     later = json.loads((output / "llm/call-0007.request.json").read_text())
     assert json.loads(later["messages"][1]["content"])["profile_query"]["enabled"] is False
 
@@ -751,7 +776,7 @@ def test_timeout_kills_descendant_that_ignores_sigterm(tmp_path):
 def test_live_provider_requires_api_key_before_creating_run_directory(task, monkeypatch):
     manifest, config, output = task
     value = yaml.safe_load(config.read_text())
-    value["generator"] = {"provider": "chat_completions", "model": "m", "base_url": "http://127.0.0.1:9/v1",
+    value["coder"] = {"provider": "chat_completions", "model": "m", "base_url": "http://127.0.0.1:9/v1",
                           "api_key_env": "KAI_TEST_MISSING_KEY"}
     config.write_text(yaml.safe_dump(value))
     monkeypatch.delenv("KAI_TEST_MISSING_KEY", raising=False)
@@ -766,13 +791,13 @@ def test_api_key_check_skips_replay_and_keyless_endpoints(monkeypatch):
     from kai_pichu.config import missing_api_keys
     monkeypatch.delenv("KAI_TEST_MISSING_KEY", raising=False)
     live = ModelConfig(model="m", base_url="http://127.0.0.1:9/v1", api_key_env="KAI_TEST_MISSING_KEY")
-    assert missing_api_keys(OptimizeConfig(generator=live)) == ["KAI_TEST_MISSING_KEY"]
-    assert missing_api_keys(OptimizeConfig(generator=ModelConfig(provider="replay"), judge=live)) == ["KAI_TEST_MISSING_KEY"]
-    assert missing_api_keys(OptimizeConfig(generator=ModelConfig(provider="replay"))) == []
+    assert missing_api_keys(OptimizeConfig(coder=live)) == ["KAI_TEST_MISSING_KEY"]
+    assert missing_api_keys(OptimizeConfig(coder=ModelConfig(provider="replay"), judge=live)) == ["KAI_TEST_MISSING_KEY"]
+    assert missing_api_keys(OptimizeConfig(coder=ModelConfig(provider="replay"))) == []
     keyless = ModelConfig(model="m", base_url="http://127.0.0.1:9/v1", api_key_env="")
-    assert missing_api_keys(OptimizeConfig(generator=keyless)) == []
+    assert missing_api_keys(OptimizeConfig(coder=keyless)) == []
     monkeypatch.setenv("KAI_TEST_MISSING_KEY", "secret")
-    assert missing_api_keys(OptimizeConfig(generator=live)) == []
+    assert missing_api_keys(OptimizeConfig(coder=live)) == []
 
 
 @pytest.mark.parametrize("option_device, measurement_device, gpu_device, expected", [
@@ -1145,7 +1170,7 @@ def test_history_tables_only_list_recent_rounds_but_track_cases_over_all(monkeyp
 def test_judge_request_carries_history_tables_with_the_previous_diagnosis(task, monkeypatch):
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
-    values["generator"]["responses"] = [reply(5), reply(4), reply(3)]
+    values["coder"]["responses"] = [reply(5), reply(4), reply(3)]
     opt = json.dumps({"bottleneck": "issue-bound loop", "optimization_method": "register blocking", "modification_plan": "p"})
     values["judge"]["responses"] = [opt, opt]
     loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
@@ -1173,7 +1198,7 @@ def test_judge_sees_the_failed_attempt_with_its_own_profile(task, monkeypatch):
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
     # cost 10 equals the baseline: it runs, but no confirmed gain, so it is not eligible.
-    values["generator"]["responses"] = [reply(5), reply(10), reply(4)]
+    values["coder"]["responses"] = [reply(5), reply(10), reply(4)]
     opt = json.dumps({"bottleneck": "b", "optimization_method": "m", "modification_plan": "p"})
     values["judge"]["responses"] = [opt, opt]
     loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
@@ -1213,7 +1238,7 @@ def test_judge_can_read_a_saved_round_and_choose_it_as_the_starting_point(task, 
     values["budget"]["llm_calls"] = 8
     # Round 1 cost 5, round 2 cost 8 (eligible but slower, so it becomes the anchor),
     # round 3 must be built on round 1 because the judge says so.
-    values["generator"]["responses"] = [reply(5), reply(8), reply(4)]
+    values["coder"]["responses"] = [reply(5), reply(8), reply(4)]
     plan = {"bottleneck": "b", "optimization_method": "m", "modification_plan": "p"}
     values["judge"]["responses"] = [
         json.dumps(plan),
@@ -1230,12 +1255,12 @@ def test_judge_can_read_a_saved_round_and_choose_it_as_the_starting_point(task, 
     reads = judge[2]["candidate_sources"]
     assert reads[0]["round"] == 1 and reads[0]["sources"]["solution.py"].endswith("COST = 5\n")
     assert reads[1] == {"round": 9, "status": "unavailable", "error": {"message": "no saved candidate for this round"}}
-    generator = [c for r, c in zip(requests, contexts) if r["role"] == "generator"]
-    assert generator[1]["base_round"] == 1 and generator[1]["current_sources"]["solution.py"].endswith("COST = 8\n") is False
-    assert generator[2]["base_round"] == 1 and generator[2]["current_sources"]["solution.py"].endswith("COST = 5\n")
+    coder = [c for r, c in zip(requests, contexts) if r["role"] == "coder"]
+    assert coder[1]["base_round"] == 1 and coder[1]["current_sources"]["solution.py"].endswith("COST = 8\n") is False
+    assert coder[2]["base_round"] == 1 and coder[2]["current_sources"]["solution.py"].endswith("COST = 5\n")
     state = json.loads((output / "state.json").read_text())
     assert [row["base_round"] for row in state["history"]] == [None, 1, 1]
-    assert "| 3 | 1 | completed |" in generator[2]["history"] or True  # lineage column exists in later tables
+    assert "| 3 | 1 | completed |" in coder[2]["history"] or True  # lineage column exists in later tables
     from kai_pichu.optimizer.history import history_tables
     assert "| round | built on | status |" in history_tables(state["history"])
     assert "| 3 | 1 | completed |" in history_tables(state["history"])
@@ -1244,7 +1269,7 @@ def test_judge_can_read_a_saved_round_and_choose_it_as_the_starting_point(task, 
 def test_unknown_base_round_falls_back_to_the_anchor_with_a_note(task, monkeypatch):
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
-    values["generator"]["responses"] = [reply(5), reply(4)]
+    values["coder"]["responses"] = [reply(5), reply(4)]
     plan = {"bottleneck": "b", "optimization_method": "m", "modification_plan": "p", "base_round": 7}
     values["judge"]["responses"] = [json.dumps(plan)]
     values["budget"]["rounds"] = 2
@@ -1252,9 +1277,9 @@ def test_unknown_base_round_falls_back_to_the_anchor_with_a_note(task, monkeypat
     monkeypatch.setattr(loop.evaluator, "profile", lambda *a, **k: {"status": "disabled"})
     assert loop.run()["final_accepted"]
     requests = [json.loads(path.read_text()) for path in sorted((output / "llm").glob("*.request.json"))]
-    generator = [json.loads(r["messages"][-1]["content"]) for r in requests if r["role"] == "generator"]
-    assert generator[1]["base_round"] == 1
-    assert "base_round 7 names no saved candidate" in generator[1]["strategy_note"]
+    coder = [json.loads(r["messages"][-1]["content"]) for r in requests if r["role"] == "coder"]
+    assert coder[1]["base_round"] == 1
+    assert "base_round 7 names no saved candidate" in coder[1]["strategy_note"]
 
 
 def test_splice_joins_continuations_and_drops_repeated_or_restarted_text():
@@ -1286,7 +1311,7 @@ def _truncating_client(pieces):
     return complete, calls
 
 
-def test_a_truncated_generator_reply_is_continued_and_spliced(task, monkeypatch):
+def test_a_truncated_coder_reply_is_continued_and_spliced(task, monkeypatch):
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
     values["budget"]["rounds"] = 1
@@ -1294,7 +1319,7 @@ def test_a_truncated_generator_reply_is_continued_and_spliced(task, monkeypatch)
     whole = reply(5)
     cut = len(whole) // 2
     complete, calls = _truncating_client([{"text": whole[:cut], "truncated": True}, {"text": whole[cut:]}])
-    monkeypatch.setattr(loop.clients["generator"], "complete", complete)
+    monkeypatch.setattr(loop.clients["coder"], "complete", complete)
     summary = loop.run()
     assert summary["final_accepted"] and summary["llm_calls"] == 2
     assert calls[1][-2]["role"] == "assistant" and calls[1][-2]["content"] == whole[:cut]
@@ -1308,12 +1333,12 @@ def test_a_truncated_generator_reply_is_continued_and_spliced(task, monkeypatch)
 def test_continuation_gives_up_after_the_configured_attempts_and_the_round_repairs(task, monkeypatch):
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
-    values["generator"]["max_continuations"] = 1
+    values["coder"]["max_continuations"] = 1
     values["budget"]["rounds"] = 1
     loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
     complete, calls = _truncating_client([{"text": '{"hypothesis": "h", "fil', "truncated": True},
                                           {"text": 'es": {"solution.py": "FACTOR = 1', "truncated": True}])
-    monkeypatch.setattr(loop.clients["generator"], "complete", complete)
+    monkeypatch.setattr(loop.clients["coder"], "complete", complete)
     summary = loop.run()
     assert not summary["final_accepted"] and len(calls) == 2
     state = json.loads((output / "state.json").read_text())
@@ -1325,11 +1350,11 @@ def test_continuation_gives_up_after_the_configured_attempts_and_the_round_repai
 def test_continuation_can_be_disabled(task, monkeypatch):
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
-    values["generator"]["max_continuations"] = 0
+    values["coder"]["max_continuations"] = 0
     values["budget"]["rounds"] = 1
     loop = OptimizationLoop(Workspace.create(manifest, output), OptimizeConfig.model_validate(values))
     complete, calls = _truncating_client([{"text": '{"hypothesis": "h", "fil', "truncated": True}])
-    monkeypatch.setattr(loop.clients["generator"], "complete", complete)
+    monkeypatch.setattr(loop.clients["coder"], "complete", complete)
     loop.run()
     assert len(calls) == 1
     state = json.loads((output / "state.json").read_text())
@@ -1341,7 +1366,7 @@ def test_a_finished_run_continues_when_rounds_are_raised(task, monkeypatch):
     values = yaml.safe_load(config_path.read_text())
     values["budget"]["rounds"] = 2
     values["budget"]["llm_calls"] = 10
-    values["generator"]["responses"] = [reply(5), reply(4), reply(3), reply(2)]
+    values["coder"]["responses"] = [reply(5), reply(4), reply(3), reply(2)]
     opt = json.dumps({"bottleneck": "b", "optimization_method": "m", "modification_plan": "p"})
     values["judge"]["responses"] = [opt, opt, opt]
     first = config_path.with_name("two.yaml"); first.write_text(yaml.safe_dump(values))

@@ -15,9 +15,9 @@ class KernelIndividual:
     fingerprint: str
     metrics: dict[str, Any]
     score: float | None = None
-    # The judge strategy the generator was given for this round; None for the seed round.
+    # The judge strategy the coder was given for this round; None for the seed round.
     diagnosis: dict[str, Any] | None = field(default=None)
-    # The 1-based round whose code the generator modified; None for the seed round.
+    # The 1-based round whose code the coder modified; None for the seed round.
     base_round: int | None = field(default=None)
 
     @property

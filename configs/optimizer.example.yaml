@@ -1,5 +1,5 @@
 schema_version: 1
-generator:
+coder:
   provider: chat_completions
   base_url: http://localhost:8000/v1
   model: YOUR_MODEL_NAME
@@ -7,7 +7,7 @@ generator:
   max_tokens: 262144
   temperature: 0.2
   timeout_seconds: 120
-# judge:  # Omit to use the generator's model configuration.
+# judge:  # Omit to use the coder's model configuration.
 #   provider: chat_completions
 #   base_url: http://localhost:8000/v1
 #   model: YOUR_JUDGE_MODEL

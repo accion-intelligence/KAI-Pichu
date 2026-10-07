@@ -1,4 +1,4 @@
-"""Round history as tables the judge and generator can read at a glance.
+"""Round history as tables the judge and coder can read at a glance.
 
 The loop already keeps every round's feedback in the run state. This module
 turns that state into two Markdown tables: one row per recent round with its

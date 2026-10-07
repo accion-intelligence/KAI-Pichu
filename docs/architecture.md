@@ -8,7 +8,7 @@ Only the optimization loop chooses what implementation to propose next.
 flowchart LR
     T[User benchmark] --> F[Frozen task and baseline]
     F --> V[SDK preflight: checks and baseline timing]
-    V --> G[Generator]
+    V --> G[Coder]
     G --> C[Candidate workspace]
     C --> E[SDK subprocess: correctness and paired A/B]
     E -->|incorrect| R[Correctness judge and repair]

@@ -1,6 +1,6 @@
 # Showcase: fusing AutoAWQ's INT4 linear layer, 3.4× over its two-stage path
 
-One `kind: fusion` task, `gpt-5.6-luna` as generator and judge, 20 rounds, no
+One `kind: fusion` task, `gpt-5.6-luna` as coder and judge, 20 rounds, no
 target speedup. This page records how the run went; the
 [README](../README.md#showcase-awq-int4-decode-fusion-34-geometric-mean-up-to-44-per-shape)
 has the headline.
@@ -21,7 +21,7 @@ same fixtures.
 ## Setup
 
 NVIDIA GeForce RTX 5070, CUDA 12.9, PyTorch 2.8, cuBLAS from the CUDA
-toolkit. Generator and judge: `gpt-5.6-luna` through the OpenAI Responses API at
+toolkit. Coder and judge: `gpt-5.6-luna` through the OpenAI Responses API at
 reasoning effort `xhigh`. Budget: 20 rounds, no `target_speedup`; Nsight
 Compute profiling on, including per-instruction stall attribution with source
 lines, captured each round on the search case where the candidate gained least.

@@ -36,6 +36,11 @@ def main(argv: list[str] | None = None) -> int:
     install.add_argument("--directory", type=Path, help="Project root for --scope project (default: current directory)")
     install.add_argument("--force", action="store_true", help="Replace an existing installation")
     skill_commands.add_parser("path", help="Print the packaged skill directory")
+    dashboard = commands.add_parser("dashboard", help="Serve a read-only live view of one run or a directory of runs")
+    dashboard.add_argument("runs", type=Path, nargs="?", default=Path("runs"),
+                           help="A run directory, or a directory whose children are runs (default: ./runs)")
+    dashboard.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1; run records include prompts and source)")
+    dashboard.add_argument("--port", type=int, default=8765)
     config_command = commands.add_parser("config", help="Export an optimizer config template or JSON Schema")
     config_command.add_argument("--output", required=True, type=Path)
     config_command.add_argument("--schema", action="store_true")
@@ -90,6 +95,10 @@ def main(argv: list[str] | None = None) -> int:
                 destination = install_skill(agent, scope=args.scope, root=args.directory, force=args.force)
                 print(f"Installed {agent} skill: {destination}")
             print("Ask your agent to build a KAI task for your operator; the skill triggers on that request.")
+            return 0
+        if args.command == "dashboard":
+            from .dashboard import serve
+            serve(args.runs, host=args.host, port=args.port)
             return 0
         if args.command == "config":
             import yaml

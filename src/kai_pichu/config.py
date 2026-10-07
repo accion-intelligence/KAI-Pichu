@@ -19,7 +19,7 @@ class ModelConfig(ConfigModel):
     base_url: str = ""
     api_key_env: str = Field(default="KAI_PICHU_API_KEY",
         description="Environment variable holding the bearer token; empty string means the endpoint needs no key")
-    # The generator returns complete replacement text for every file it touches,
+    # The coder returns complete replacement text for every file it touches,
     # and for a reasoning provider this budget is shared with thinking tokens.
     # 256k leaves room for both; providers cap it at their own limit.
     max_tokens: int = Field(default=262144, ge=1)
@@ -105,12 +105,22 @@ class ProfileConfig(ConfigModel):
 
 class OptimizeConfig(ConfigModel):
     schema_version: Literal[1] = 1
-    generator: ModelConfig
+    coder: ModelConfig
     judge: ModelConfig | None = None
     budget: Budget = Field(default_factory=Budget)
     resources: Resources = Field(default_factory=Resources)
     profile: ProfileConfig = Field(default_factory=ProfileConfig)
     max_context_chars: int = Field(default=120000, ge=1000)
+
+    @model_validator(mode="before")
+    @classmethod
+    def rename_legacy_role(cls, data: Any) -> Any:
+        """Read configs written before the coder role was named `generator`, including old runs' config.json."""
+        if isinstance(data, dict) and "generator" in data:
+            if "coder" in data:
+                raise ValueError("config names both coder and its legacy name generator; keep only coder")
+            data = {("coder" if key == "generator" else key): value for key, value in data.items()}
+        return data
 
 
 def load_config(path: Path) -> OptimizeConfig:
@@ -119,7 +129,7 @@ def load_config(path: Path) -> OptimizeConfig:
 
 def missing_api_keys(config: OptimizeConfig) -> list[str]:
     """Names of configured key variables that are unset or empty; replay and keyless endpoints are skipped."""
-    names = {model.api_key_env for model in (config.generator, config.judge)
+    names = {model.api_key_env for model in (config.coder, config.judge)
              if model is not None and model.provider != "replay" and model.api_key_env}
     return sorted(name for name in names if not os.environ.get(name))
 
@@ -132,6 +142,6 @@ def require_api_keys(config: OptimizeConfig) -> None:
 
 
 def example_config() -> dict[str, Any]:
-    return OptimizeConfig(generator=ModelConfig(
+    return OptimizeConfig(coder=ModelConfig(
         model="YOUR_MODEL_NAME", base_url="http://localhost:8000/v1",
     )).model_dump(exclude_none=True)

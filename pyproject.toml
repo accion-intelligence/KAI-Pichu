@@ -24,7 +24,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"kai_pichu" = ["*.md"]
+"kai_pichu" = ["*.md", "*.html"]
 "kai_pichu.benchmark" = ["*.md", "templates/**/*"]
 "kai_pichu.skills" = ["*/SKILL.md", "*/**/*"]
 

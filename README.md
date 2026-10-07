@@ -22,9 +22,9 @@ You define what the operator must do, how to check it, what to beat and what to 
 **Three parts: a Benchmark SDK, an optimization loop, and a record of the work.**
 
 - **Benchmark SDK.** A task is a manifest plus an adapter: cases per split, input synthesis, an independent oracle, deliberately wrong outputs the validator must reject, and a declared timing boundary. Search and acceptance splits span the same input ranges; the model sees search results only. The SDK times both implementations in interleaved paired blocks and reports the geometric-mean speedup with bootstrap intervals alongside every case's own speedup; cases below a declared regression margin are flagged for review. `kind: fusion` tasks hand the model kernels you already have, read-only, and ask for fewer launches.
-- **Optimization loop.** Any model behind an OpenAI-compatible, Responses or Anthropic endpoint plays generator and judge:
+- **Optimization loop.** Any model behind an OpenAI-compatible, Responses or Anthropic endpoint plays coder and judge:
 
-  - *Generate and repair.* The generator writes the permitted implementation files. Build or correctness failures go to a diagnostic judge, which identifies one issue and proposes a focused repair.
+  - *Generate and repair.* The coder writes the permitted implementation files. Build or correctness failures go to a diagnostic judge, which identifies one issue and proposes a focused repair.
   - *Investigate and optimize.* For valid candidates the judge reads the measured baseline and candidate values and, when enabled, an Nsight Compute profile of the search case where the candidate gained least. It can query the captured profile before proposing one bottleneck hypothesis and one code change.
   - *Keep progress.* The loop builds on the latest candidate that passed every rule (correct, faster than the baseline overall, within every declared metric limit) and never ranks two passing candidates itself; the model sees every round's per-case numbers and decides. The highest-scoring candidate is kept for acceptance. Runs work within round, model-call and time budgets and resume after interruptions.
   - *Recheck.* After search, the best candidate is rerun on the held-out acceptance split and marked `accepted` only if every run passes.
@@ -110,7 +110,7 @@ What the SDK enforces for every task, whoever writes it:
 
 ## Showcase: $1, 2 hours, 3.5× to 3.9× over cuDNN on held-out shapes
 
-One packaged task, `gpt-5.6-luna` as generator and judge, 13 rounds, no target speedup. The best candidate reached **4.25× over cuDNN on the two search cases**; frozen and rerun twice on five held-out cases it never saw, it held a **geometric mean of 3.85× and 3.54×** and was faster than cuDNN on every case (RTX 5070).
+One packaged task, `gpt-5.6-luna` as coder and judge, 13 rounds, no target speedup. The best candidate reached **4.25× over cuDNN on the two search cases**; frozen and rerun twice on five held-out cases it never saw, it held a **geometric mean of 3.85× and 3.54×** and was faster than cuDNN on every case (RTX 5070).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/depthwise-showcase-dark.svg">
