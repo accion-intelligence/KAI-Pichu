@@ -205,7 +205,6 @@ If KAI Pichu supports your work, please cite the relevant papers:
 }
 
 @inproceedings{li2026stitchcuda,
-  li2026stitchcuda,
 title={Stitch{CUDA}: An Automated Multi-Agents End-to-End {GPU} Programing Framework with Rubric-based Agentic Reinforcement Learning},
 author={Shiyang Li and Zijian Zhang and Winson Chen and Yuebo Luo and Mingyi Hong and Caiwen Ding},
 booktitle={Forty-third International Conference on Machine Learning},
