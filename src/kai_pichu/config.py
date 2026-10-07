@@ -85,6 +85,10 @@ class ProfileConfig(ConfigModel):
     import_source: bool = Field(default=True, description=(
         "Pass --import-source yes so per-instruction counters and warp-stall samples map to source lines "
         "when the kernel was built with -lineinfo"))
+    roofline: bool = Field(default=True, description=(
+        "Also collect Nsight Compute's roofline counters (FLOP, DRAM bytes, peaks) in every capture, and capture "
+        "the baseline once per search case after preflight, so a run records where the baseline and each "
+        "candidate sit on the roofline. These captures are records only; they never reach the judge or the score"))
     report_reader: str | None = None
     ncu_report_dir: str | None = None
     query_rounds: int = Field(default=4, ge=0, le=10)

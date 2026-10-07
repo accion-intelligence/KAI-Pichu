@@ -512,6 +512,29 @@ def test_resume_rejects_changed_frozen_benchmark(task):
     assert not (output / "llm").exists()
 
 
+def test_the_baseline_is_captured_once_per_search_case_and_kept_from_the_judge(task, monkeypatch):
+    manifest, config_path, output = task
+    values = yaml.safe_load(config_path.read_text())
+    values["profile"] = {"enabled": True}
+    workspace = Workspace.create(manifest, output)
+    loop = OptimizationLoop(workspace, OptimizeConfig.model_validate(values))
+    profiled = []
+
+    def profile(tag, candidate, **kwargs):
+        profiled.append((tag, candidate, kwargs.get("case_id")))
+        return {"status": "test_diagnostic", "evidence": {"tag": tag}}
+
+    monkeypatch.setattr(loop.evaluator, "profile", profile)
+    assert loop.run()["final_accepted"]
+    assert profiled[0] == ("baseline/one", workspace.baseline, "one")  # right after preflight, before any model call
+    assert [tag for tag, _, _ in profiled].count("baseline/one") == 1
+    for request in (json.loads(path.read_text()) for path in (output / "llm").glob("*.request.json")):
+        assert "baseline/one" not in json.dumps(request)  # a record for the engineer, not judge evidence
+    (output / "profiles" / "baseline").mkdir(parents=True)
+    loop._profile_baseline({"cases": [{"id": "one"}]})  # a resumed run keeps the captures it has
+    assert [tag for tag, _, _ in profiled].count("baseline/one") == 1
+
+
 def test_search_builds_on_the_latest_eligible_candidate_and_shows_the_best(task, monkeypatch):
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
@@ -567,14 +590,16 @@ def test_resource_monitor_overrides_child_accepted_report(task, monkeypatch):
 
 
 @pytest.mark.parametrize("metrics", [[], ["gpu__time_duration.sum"]])
-def test_ncu_command_uses_adapter_worker_and_binds_candidate_fingerprint(task, monkeypatch, metrics):
+@pytest.mark.parametrize("roofline", [True, False])
+def test_ncu_command_uses_adapter_worker_and_binds_candidate_fingerprint(task, monkeypatch, metrics, roofline):
     from kai_pichu import evaluator
     from kai_pichu.benchmark.loading import file_inventory
     manifest, config_path, output = task
     values = yaml.safe_load(config_path.read_text())
-    values["profile"] = {"enabled": True, "case_id": "one", "metrics": metrics}
+    values["profile"] = {"enabled": True, "case_id": "one", "metrics": metrics, "roofline": roofline}
     values["resources"] = {"gpu_device": 0}
     workspace = Workspace.create(manifest, output)
+    from kai_pichu.roofline import ROOFLINE_METRICS
     monkeypatch.setattr(evaluator.shutil, "which", lambda executable: "/test/ncu")
     commands = []
 
@@ -593,12 +618,10 @@ def test_ncu_command_uses_adapter_worker_and_binds_candidate_fingerprint(task, m
     assert "--profile-from-start=off" in command
     assert any(arg.startswith("--export=") for arg in command)
     assert "--print-units=base" in command
-    if metrics:
-        assert "--metrics=gpu__time_duration.sum" in command
-        assert not any(arg.startswith("--section=") for arg in command)
-    else:
-        assert "--section=MemoryWorkloadAnalysis" in command
-        assert not any(arg.startswith("--metrics=") for arg in command)
+    requested = [arg.removeprefix("--metrics=").split(",") for arg in command if arg.startswith("--metrics=")]
+    expected = list(dict.fromkeys([*metrics, *(ROOFLINE_METRICS if roofline else [])]))
+    assert requested == ([expected] if expected else [])  # roofline counters ride along with either mode
+    assert any(arg.startswith("--section=") for arg in command) == (not metrics)
     assert "ncu_csv" not in result
     assert result["query_available"]
     assert command[command.index("--candidate") + 1] == str(workspace.baseline)

@@ -255,6 +255,19 @@ class OptimizationLoop:
             raise StopRun(profile["process"]["status"], "resource conflict during profiling")
         return profile
 
+    def _profile_baseline(self, report: dict[str, Any]) -> None:
+        """Capture the baseline once per search case: where the work starts on the roofline.
+
+        A record for the engineer, like every file in the run; neither the judge
+        nor the score reads it. A resumed run keeps the captures it already has.
+        """
+        if (self.workspace.root / "profiles" / "baseline").exists():
+            return
+        cases = [self.config.profile.case_id] if self.config.profile.case_id else \
+            [case["id"] for case in report.get("cases", []) if isinstance(case, dict) and case.get("id")]
+        for case in cases:
+            self._profile(f"baseline/{case}", self.workspace.baseline, case, "every_search_case")
+
     def _cases_to_profile(self, index: int, metrics: dict[str, Any]) -> list[str]:
         """The search cases captured this round: all of them, or a rotating window of cases_per_round."""
         cases = sorted((metrics.get("objective") or {}).get("per_case") or {})
@@ -577,6 +590,8 @@ class OptimizationLoop:
                     if baseline["status"] != "ready":
                         raise StopRun("benchmark_error", baseline.get("message", "baseline did not pass its conformance checks or timing"))
                     task_context["hardware"] = baseline.get("timing_environment", {})
+                    if self.config.profile.enabled and self.config.profile.roofline:
+                        self._profile_baseline(baseline)
                     for index in range(self.state["next_round"], self.config.budget.rounds):
                         self._remaining()
                         # Reserve each round before work. Resume skips an interrupted

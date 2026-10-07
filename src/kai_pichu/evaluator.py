@@ -15,6 +15,7 @@ from .config import OptimizeConfig
 from .io import write_json
 from .process import run_process
 from .profiling import ProfileReport
+from .roofline import ROOFLINE_METRICS, roofline_point
 from .workspace import Workspace
 
 
@@ -157,10 +158,13 @@ class Evaluator:
                    "--target-processes=all", "--profile-from-start=off", "--replay-mode=kernel",
                    "--print-units=base", "--print-fp", "--log-file=" + str(csv),
                    "--export=" + str(report_path)]
+        extra = list(ROOFLINE_METRICS) if settings.roofline else []
         if settings.metrics:
-            command.append("--metrics=" + ",".join(settings.metrics))
+            command.append("--metrics=" + ",".join(dict.fromkeys([*settings.metrics, *extra])))
         else:
             command.extend("--section=" + section for section in settings.sections)
+            if extra:  # NCU collects --metrics in addition to the sections
+                command.append("--metrics=" + ",".join(extra))
         if settings.import_source:
             command.append("--import-source=yes")
         command += [sys.executable, "-m", "kai_pichu.profile_worker", str(self.workspace.manifest),
@@ -179,6 +183,8 @@ class Evaluator:
             result["workload"] = json.loads(metadata.read_text())
         if json_fingerprint(file_inventory(candidate, self.workspace.spec.implementation.files)) != fingerprint:
             raise ValueError("profiled candidate source changed")
+        if result["status"] == "profiled" and settings.roofline:
+            result["roofline"] = roofline_point(csv)
         if result["status"] == "profiled":
             try:
                 reader = ProfileReport(report_path, csv_path=csv, settings=settings,
