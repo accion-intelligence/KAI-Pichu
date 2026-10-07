@@ -27,9 +27,13 @@ def test_snapshot_reconstructs_a_finished_replay_run(task):  # noqa: F811
     assert [a["accepted"] for a in snap["acceptance"]] == [True, True]
     calls = [(s["actor"], s["round"]) for s in snap["steps"] if s["kind"] == "model"]
     assert calls == [("coder", 1), ("judge", 2), ("coder", 2), ("judge", 3), ("coder", 3)]
-    notes = [(s["round"], s["text"], s["note"]["label"], s["note"]["text"]) for s in snap["steps"] if s.get("note")]
-    assert notes == [(2, "decided the repair", "critical issue", "wrong factor"),
-                     (3, "decided the bottleneck", "bottleneck", "synthetic test")]
+    decisions = [(s["round"], s["text"].split(" · ")[0]) for s in snap["steps"] if s["actor"] == "judge"]
+    assert decisions == [(2, "decided the repair"), (3, "decided the bottleneck")]
+    progress = snap["progress"]
+    assert [(p["round"], p["status"], p["eligible"]) for p in progress] == [
+        (1, "error", False), (2, "completed", True), (3, "completed", True)]
+    assert [p["best"] for p in progress] == [None, pytest.approx(10 / 6), pytest.approx(2.0)]  # running best of eligible rounds
+    assert all(a["t"] <= b["t"] and a["tokens"] <= b["tokens"] for a, b in zip(progress, progress[1:]))
     stages = [s["stage"] for s in snap["steps"] if s["kind"] == "evaluate"]
     assert stages == ["preflight", "evaluate", "evaluate", "evaluate", "acceptance", "acceptance"]
     assert snap["used"]["llm_calls"] == 5 and snap["budget"]["rounds"] == 3
@@ -56,6 +60,26 @@ def test_snapshot_reports_the_call_in_flight_while_a_process_holds_the_run(tmp_p
     assert snap["activity"]["stage"] == "coder" and snap["activity"]["round"] == 1
     assert snap["current_round"] == 1 and snap["current_phase"] == "seed"
     assert snap["steps"][-1]["status"] == "running"
+    assert snap["live_advice"] is None
+
+
+def test_the_judges_advice_shows_while_its_round_is_still_running(tmp_path, monkeypatch):
+    root = _in_flight_run(tmp_path / "run")
+    state = json.loads((root / "state.json").read_text())
+    state.update(next_round=2, history=[{"id": 0, "metrics": {"status": "completed"}, "score": 1.1, "hypothesis": "h"}])
+    write_json(root / "state.json", state, replace=True)
+    write_json(root / "reports" / "0001-round-0000.json", {"status": "completed"})
+    (root / "reports" / "0001-round-0000.log").write_text("ok\n")
+    write_json(root / "reports" / "0001-round-0000.process.json", {"status": "completed", "elapsed_seconds": 0.0})
+    decision = {"bottleneck": "b", "optimization_method": "m", "modification_plan": "p", "base_round": 1}
+    write_json(root / "llm" / "call-0001.request.json", {"role": "judge", "continuation": False, "messages": []})
+    write_json(root / "llm" / "call-0001.response.json", {"text": json.dumps(decision), "usage": {}})
+    write_json(root / "llm" / "call-0002.request.json", {"role": "coder", "continuation": False, "messages": []})
+    monkeypatch.setattr(dashboard, "is_live", lambda path: True)
+    snap = dashboard.snapshot(root)
+    assert snap["current_round"] == 2 and snap["activity"]["stage"] == "coder"
+    assert snap["live_advice"] == {"round": 2, "base_round": 1, "diagnosis": {
+        "bottleneck": "b", "optimization_method": "m", "modification_plan": "p"}}
 
 
 def test_snapshot_describes_an_evaluation_in_flight(tmp_path, monkeypatch):
@@ -83,12 +107,71 @@ def test_snapshot_reads_runs_recorded_with_the_generator_role(tmp_path, monkeypa
     assert snap["used"]["role_calls"] == {"coder": 1, "judge": 0}
 
 
+def test_a_call_abandoned_by_an_interrupted_run_is_not_in_flight_after_resume(tmp_path, monkeypatch):
+    import os
+    root = _in_flight_run(tmp_path / "run")  # call-0000 never got a response: the run was interrupted
+    write_json(root / "llm" / "call-0001.request.json", {"role": "coder", "continuation": False, "messages": []})
+    first = root / "llm" / "call-0000.request.json"
+    os.utime(first, (first.stat().st_mtime - 60, first.stat().st_mtime - 60))  # the resumed run's call came later
+    monkeypatch.setattr(dashboard, "is_live", lambda path: True)
+    snap = dashboard.snapshot(root)
+    models = [s for s in snap["steps"] if s["kind"] == "model"]
+    assert [s["status"] for s in models] == ["stopped", "running"]
+    assert snap["activity"]["stage"] == "coder" and snap["activity"]["since"] == models[-1]["start"]
+
+
 def test_snapshot_marks_a_dead_running_run_stopped(tmp_path, monkeypatch):
     root = _in_flight_run(tmp_path / "run")
     monkeypatch.setattr(dashboard, "is_live", lambda path: False)
     snap = dashboard.snapshot(root)
     assert snap["stale"] and snap["activity"] is None
     assert snap["steps"][-1]["status"] == "stopped"
+
+
+SOL = ("sm__throughput.avg.pct_of_peak_sustained_elapsed", "gpu__compute_memory_throughput.avg.pct_of_peak_sustained_elapsed",
+       "gpu__dram_throughput.avg.pct_of_peak_sustained_elapsed")
+
+
+def _capture(root: Path, tag: str, fingerprint: str, launches: list[tuple[float, float, float, float]]) -> None:
+    """One NCU capture; each launch is (GPU time ns, SM %, memory %, DRAM %)."""
+    folder = root / "profiles" / tag
+    write_json(folder / "profile.json", {"status": "profiled", "implementation_fingerprint": fingerprint,
+                                         "case_selection": {"case_id": tag.split("/")[-1]}, "process": {"elapsed_seconds": 2.0}})
+    names = ["gpu__time_duration.sum", *SOL]
+    lines = ['"ID","Kernel Name",' + ",".join(f'"{n}"' for n in names), '"","","ns","%","%","%"']
+    lines += [f'"{i}","k{i}",' + ",".join(f'"{v}"' for v in launch) for i, launch in enumerate(launches)]
+    (folder / "metrics.csv").write_text("\n".join(lines) + "\n")
+
+
+def test_headroom_pairs_the_baseline_with_the_best_candidates_capture(tmp_path, monkeypatch):
+    root = _in_flight_run(tmp_path / "run")
+    monkeypatch.setattr(dashboard, "is_live", lambda path: False)
+    state = json.loads((root / "state.json").read_text())
+    metrics = {"status": "completed", "acceptance": {"case_speedups": {"one": {"speedup": 2.5, "interval": [2.4, 2.6]}}}}
+    best = {"id": 1, "fingerprint": "best", "score": 2.5, "metrics": metrics, "hypothesis": "h"}
+    state.update(best=best, latest_eligible=best, history=[{**best, "id": 0, "fingerprint": "other"}, best])
+    write_json(root / "state.json", state, replace=True)
+    write_json(root / "config.json", {**json.loads((root / "config.json").read_text()), "profile": {"enabled": True}}, replace=True)
+    _capture(root, "baseline/one", "baseline", [(300, 70, 40, 5), (100, 30, 80, 60)])  # two launches, time-weighted
+    headroom = dashboard.snapshot(root)["headroom"]
+    assert headroom["note"] == "best round 2 is captured when the next round profiles it"
+    _capture(root, "round-0001/one", "other", [(100, 10, 10, 10)])  # an earlier candidate, not the best
+    _capture(root, "round-0002/one", "best", [(100, 95, 90, 8)])
+    snap = dashboard.snapshot(root)
+    [case] = snap["headroom"]["cases"]
+    assert snap["headroom"]["note"] is None and snap["headroom"]["best_round"] == 2
+    assert case["case"] == "one" and case["speedup"] == 2.5
+    assert case["baseline"] == {"compute": pytest.approx(60), "memory": pytest.approx(50), "dram": pytest.approx(18.75), "launches": 2}
+    assert case["best"]["compute"] == 95 and case["best"]["memory"] == 90
+    assert any(s["text"] == "profile baseline one" and s["round"] is None for s in snap["steps"])
+
+
+def test_headroom_explains_runs_without_it(tmp_path, monkeypatch):
+    root = _in_flight_run(tmp_path / "run")
+    monkeypatch.setattr(dashboard, "is_live", lambda path: False)
+    assert dashboard.snapshot(root)["headroom"]["note"] == "profiling is off for this run"
+    _capture(root, "round-0001/one", "x", [(100, 50, 50, 5)])
+    assert dashboard.snapshot(root)["headroom"]["note"] == "this run did not capture the baseline; runs started now do"
 
 
 def test_live_detection_reads_the_run_lock(tmp_path):

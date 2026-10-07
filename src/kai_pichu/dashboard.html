@@ -12,43 +12,46 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.55 var(--mono); }
-body { padding: 20px 16px 28px; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--mono); }
+body { padding: 12px; }
 button, select { font: inherit; color: inherit; }
-.win { max-width: 1180px; margin: 0 auto; background: var(--win); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.chrome { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); color: var(--faint); font-size: 11px; }
+.win { min-height: calc(100vh - 24px); display: flex; flex-direction: column; margin: 0 auto; background: var(--win); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.chrome { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); color: var(--faint); font-size: 12px; }
 .dots { display: flex; gap: 6px; flex: none; }
 .dots i { width: 10px; height: 10px; border-radius: 50%; display: block; }
 .dots i:nth-child(1) { background: #ec6a5e; } .dots i:nth-child(2) { background: #f4bf4f; } .dots i:nth-child(3) { background: #61c554; }
 .chrome .path { flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chrome select { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; max-width: 46%; font-size: 11px; }
-.inner { padding: 16px 22px 0; }
-.roles { text-align: center; letter-spacing: .06em; font-size: 12px; padding: 6px 0 12px; border-bottom: 1px solid var(--line); text-transform: uppercase; }
+.chrome select { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; max-width: 46%; font-size: 12px; }
+.inner { padding: 10px 22px 0; }
+.roles { text-align: center; letter-spacing: .06em; font-size: 13px; padding: 2px 0 8px; border-bottom: 1px solid var(--line); text-transform: uppercase; }
 .roles b { font-weight: 700; } .roles .sep { color: var(--faint); margin: 0 10px; }
-.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 22px; padding: 10px 0 4px; color: var(--dim); font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 22px; padding: 6px 0 0; color: var(--dim); font-size: 13px; }
 .legend span::before { content: "■ "; color: var(--c); }
 .c-task { --c: var(--task); } .c-judge { --c: var(--judge); } .c-coder { --c: var(--coder); } .c-good { --c: var(--good); } .c-sdk { --c: var(--sdk); } .c-ncu { --c: var(--ncu); } .c-bad { --c: var(--bad); }
 .k { color: var(--c); }
 .dim { color: var(--dim); } .faint { color: var(--faint); } .bad { color: var(--bad); } .ok { color: var(--good); } .warn { color: var(--warn); }
 
-.grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 22px; padding: 14px 0 6px; }
+.inner { flex: 1; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 27vw, 540px); gap: 18px; padding: 14px 0 6px; align-items: stretch; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.col > .section { margin: 0; }
 .flow { display: flex; flex-direction: column; align-items: center; min-width: 0; }
 .box { border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 5%, transparent); padding: 8px 14px; }
 .box .t { color: var(--c); font-weight: 700; }
 .task { width: min(520px, 100%); text-align: center; }
-.task .desc { color: var(--dim); font-size: 12px; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.task .desc { color: var(--dim); font-size: 13px; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .vline { width: 1px; height: 22px; background: repeating-linear-gradient(var(--faint) 0 3px, transparent 3px 6px); position: relative; }
 .vline.dot::after { content: ""; position: absolute; left: -3px; bottom: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--task); }
 .loop { width: 100%; border: 1px dashed var(--line); padding: 10px 12px 12px; position: relative; }
-.loop-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; margin-bottom: 10px; }
+.loop-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13px; margin-bottom: 10px; }
 .loop-head a { color: var(--sdk); cursor: pointer; text-decoration: underline; }
 .nodes { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; align-items: stretch; }
-.arrow { align-self: center; color: var(--faint); padding: 0 4px; font-size: 12px; }
+.arrow { align-self: center; color: var(--faint); padding: 0 4px; font-size: 13px; }
 .node { border: 1px solid var(--c); padding: 8px 9px; text-align: center; min-width: 0; background: var(--win); transition: box-shadow .3s; }
 .node .t { color: var(--ink); font-weight: 700; }
 .node .m { color: var(--c); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.node .d { color: var(--dim); font-size: 12px; min-height: 2.9em; }
-.node .s { font-size: 12px; margin-top: 2px; }
+.node .d { color: var(--dim); font-size: 13px; min-height: 2.9em; }
+.node .s { font-size: 13px; margin-top: 2px; }
 .node.idle, .node.skipped { border-color: color-mix(in srgb, var(--c) 40%, var(--line)); }
 .node.idle .t, .node.idle .m, .node.skipped .t, .node.skipped .m { opacity: .6; }
 .node.running { box-shadow: 0 0 0 1px var(--c), 0 0 18px -4px var(--c); animation: glow 1.6s ease-in-out infinite; }
@@ -56,67 +59,90 @@ button, select { font: inherit; color: inherit; }
 @keyframes glow { 50% { box-shadow: 0 0 0 1px var(--c), 0 0 4px -4px var(--c); } }
 .spin { display: inline-block; animation: spin 1.2s steps(4) infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.repair { position: absolute; right: 12px; bottom: -9px; background: var(--win); padding: 0 6px; font-size: 11px; color: var(--bad); }
+.repair { position: absolute; right: 12px; bottom: -9px; background: var(--win); padding: 0 6px; font-size: 12px; color: var(--bad); }
 .effort { letter-spacing: -1px; }
 .accept { width: min(520px, 100%); text-align: center; }
 
-.grid > .advisor { --c: var(--judge); border: 1px solid var(--judge); padding: 10px 14px; min-width: 0; position: relative; }
-.advisor .scroll { position: absolute; inset: 10px 6px 10px 14px; overflow-y: auto; padding-right: 8px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-.advisor h3 { margin: 0; text-align: center; color: var(--judge); font-size: 13px; letter-spacing: .04em; }
-.advisor .sub { text-align: center; color: var(--dim); font-size: 12px; margin-bottom: 8px; }
-.advisor .lbl { color: var(--judge); margin-top: 10px; }
-.advisor .lbl::before { content: "◇ "; }
-.advisor p, .advisor .txt { margin: 2px 0 0; color: var(--ink); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.advisor details summary { cursor: pointer; color: var(--dim); font-size: 11px; list-style: none; }
-.advisor details summary::-webkit-details-marker { display: none; }
-.advisor .clip { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.advisor details[open] .clip { display: block; }
-.kv { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
-.tag { display: inline-block; font-size: 11px; padding: 0 5px; border: 1px solid currentColor; margin-left: 4px; }
+.bestcard { border: 1px solid var(--good); padding: 10px 14px; }
+.bestcard h3 { margin: 0 0 4px; text-align: center; color: var(--good); font-size: 13px; letter-spacing: .04em; }
+.bestcard .lbl { color: var(--judge); margin-top: 8px; }
+.bestcard .lbl::before { content: "◇ "; }
+.advice { --c: var(--judge); display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 18px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.advice .state { grid-column: 1 / -1; font-size: 13px; color: var(--dim); }
+.advice .cell { min-width: 0; }
+.advice .lbl { color: var(--judge); font-size: 13px; }
+.advice .lbl::before { content: "◇ "; }
+.advice .lbl.bad { color: var(--bad); }
+.advice .txt { margin: 2px 0 0; color: var(--ink); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.advice details summary { cursor: pointer; color: var(--dim); font-size: 12px; list-style: none; }
+.advice details summary::-webkit-details-marker { display: none; }
+.advice .clip { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.advice details[open] .clip { display: block; }
+.insight { margin-top: 6px; }
+.insight svg { width: 100%; height: auto; display: block; overflow: visible; }
+.headroom svg { max-height: 22vh; }
+.progress svg { max-height: 9vh; }
+.progress .lbl::before { content: none; }
+.insight .axis { stroke: var(--line); stroke-width: 1; }
+.insight .grid { stroke: var(--line); stroke-width: .5; stroke-dasharray: 2 3; opacity: .7; }
+.insight .tick { fill: var(--faint); font: 11px var(--mono); }
+.insight .zone { opacity: .07; }
+.insight .zlabel { font: 11px var(--mono); opacity: .8; }
+.insight .base { fill: var(--win); stroke: var(--dim); stroke-width: 1.4; }
+.insight .move { fill: none; stroke: var(--good); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7; transition: d .9s ease; }
+.insight .pt { transition: transform .9s ease; }
+.insight .pt circle { fill: var(--good); stroke: var(--win); stroke-width: 1; }
+.insight .pt text { fill: var(--ink); font: 11px var(--mono); }
+.insight g.case.dim { opacity: .2; }
+.insight .rows { font-size: 12px; margin-top: 4px; }
+.insight .rows > div { display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 6px; padding: 2px 0; cursor: default; }
+.insight .rows > div:hover { background: color-mix(in srgb, var(--judge) 10%, transparent); }
+.insight .rows .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.insight .rows .vals { grid-column: 2; color: var(--dim); }
+.insight .caption { color: var(--faint); font-size: 12px; margin-top: 4px; }
+.progress .line { fill: none; stroke: var(--good); stroke-width: 1.6; }
+.progress .one { stroke: var(--faint); stroke-dasharray: 3 3; }
+.progress .dot { stroke: var(--win); stroke-width: 1; }
+.progress .toggle { float: right; font-size: 12px; }
+.progress .toggle button { background: none; border: 0; padding: 0 0 0 6px; color: var(--faint); cursor: pointer; }
+.progress .toggle button[aria-pressed="true"] { color: var(--ink); text-decoration: underline; }
+.kv { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.tag { display: inline-block; font-size: 12px; padding: 0 5px; border: 1px solid currentColor; margin-left: 4px; }
 
 .section { border: 1px solid var(--line); margin: 14px 0 0; padding: 10px 12px; position: relative; }
-.section > .h { position: absolute; top: -9px; left: 12px; background: var(--win); padding: 0 6px; color: var(--dim); font-size: 12px; }
+.section > .h { position: absolute; top: -9px; left: 12px; background: var(--win); padding: 0 6px; color: var(--dim); font-size: 13px; }
 .section > .h b { color: var(--ink); font-weight: 400; }
-.traj { display: flex; align-items: flex-end; gap: 3px; height: 120px; position: relative; padding-top: 8px; }
+.traj { display: flex; align-items: flex-end; gap: 3px; height: 96px; position: relative; padding-top: 8px; }
 .traj .base { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--faint); pointer-events: none; }
-.traj .base span { position: absolute; right: 0; top: -15px; font-size: 10px; color: var(--faint); }
+.traj .base span { position: absolute; right: 0; top: -15px; font-size: 11px; color: var(--faint); }
 .bar { flex: 1 1 0; min-width: 8px; max-width: 46px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; cursor: pointer; background: none; border: 0; padding: 0; position: relative; }
 .bar i { display: block; width: 100%; background: var(--c); opacity: .85; }
 .bar.err i { background: repeating-linear-gradient(135deg, var(--bad) 0 3px, transparent 3px 6px); opacity: 1; height: 10px !important; }
 .bar.pending i { background: repeating-linear-gradient(135deg, var(--faint) 0 3px, transparent 3px 6px); height: 10px !important; animation: blink 1.4s infinite; }
 @keyframes blink { 50% { opacity: .35; } }
 .bar.sel { outline: 1px solid var(--ink); outline-offset: 2px; }
-.bar.best::before { content: "★"; color: var(--good); font-size: 10px; position: absolute; top: -14px; }
+.bar.best::before { content: "★"; color: var(--good); font-size: 11px; position: absolute; top: -14px; }
 .bar:hover i, .bar:focus-visible i { opacity: 1; filter: brightness(1.2); }
-.traj-x { display: flex; gap: 3px; font-size: 10px; color: var(--faint); margin-top: 3px; }
+.traj-x { display: flex; gap: 3px; font-size: 11px; color: var(--faint); margin-top: 3px; }
 .traj-x span { flex: 1 1 0; min-width: 8px; max-width: 46px; text-align: center; }
 
-.cases { display: grid; grid-template-columns: minmax(0, max-content) minmax(80px, 1fr) auto auto; gap: 3px 12px; align-items: center; font-size: 12px; }
+.cases { display: grid; grid-template-columns: minmax(0, max-content) minmax(80px, 1fr) auto auto; gap: 3px 12px; align-items: center; font-size: 13px; }
 .cases .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meter { height: 11px; position: relative; background: repeating-linear-gradient(135deg, var(--faint) 0 1px, transparent 1px 4px); opacity: .9; }
 .meter i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--c); }
 .meter .one { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--ink); opacity: .6; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
-.bottom { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px; }
-.log { max-height: 380px; margin-top: 6px; overflow-y: auto; font-size: 12px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-.log .row { display: grid; grid-template-columns: 64px 92px 30px minmax(0, 1fr); gap: 8px; align-items: start; padding: 1px 0; }
-.log .row > span { white-space: nowrap; }
-.log .row > span:last-child { white-space: normal; overflow-wrap: anywhere; }
-.log .row.failed span:last-child { color: var(--bad); }
-.log .note { margin: 2px 0 4px; padding-left: 8px; border-left: 2px solid var(--judge); color: var(--ink); }
-.log .note b { color: var(--judge); font-weight: 400; }
-.budget .item { margin-bottom: 8px; font-size: 12px; }
+.budget .item { margin-bottom: 6px; font-size: 13px; }
 .budget .meter { height: 12px; margin-top: 2px; }
-.status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 18px; padding: 12px 22px 12px; margin-top: 14px; border-top: 1px solid var(--line); font-size: 12px; }
+.status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 18px; padding: 12px 22px 12px; margin-top: 14px; border-top: 1px solid var(--line); font-size: 13px; }
 .status .cursor { display: inline-block; width: 8px; height: 13px; background: var(--good); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
 .pill { font-weight: 700; }
 .empty { color: var(--dim); text-align: center; padding: 60px 0; }
 
+}
 @media (max-width: 860px) {
-  .grid { grid-template-columns: 1fr; }
-  .advisor .scroll { position: static; padding: 0; }
-  .bottom { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   body { padding: 0; }
@@ -126,7 +152,6 @@ button, select { font: inherit; color: inherit; }
   .nodes { grid-template-columns: 1fr 1fr; gap: 8px; }
   .arrow { display: none; }
   .roles .sep { display: block; height: 0; overflow: hidden; }
-  .log .row { grid-template-columns: 58px 66px 26px minmax(0, 1fr); gap: 6px; }
   .section { padding-top: 26px; }
   .cases { grid-template-columns: minmax(0, 1fr) auto; }
   .cases .name { grid-column: 1 / -1; margin-top: 4px; }
@@ -153,7 +178,7 @@ const EFFORT = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 4, max: 4, enabl
 const FINAL = { accepted: ["ok", "✓ accepted"], not_accepted: ["bad", "✕ not accepted"], no_improvement: ["warn", "– no improvement"],
   planned: ["dim", "◇ planned (dry run)"], created: ["dim", "◇ created"] };
 
-let runs = [], current = decodeURIComponent(location.hash.slice(1)) || null, snap = null, offset = 0, selected = null, timer = null, failure = null, pinnedLog = true;
+let runs = [], current = decodeURIComponent(location.hash.slice(1)) || null, snap = null, offset = 0, selected = null, timer = null, failure = null;
 
 const fmtX = (v) => (v == null ? "—" : `${v.toFixed(v >= 10 ? 1 : 3)}×`);
 const fmtI = (i) => (i && i.length === 2 ? `[${i[0].toFixed(3)}, ${i[1].toFixed(3)}]` : "");
@@ -203,7 +228,7 @@ async function loadRun() {
   timer = setTimeout(loadRun, snap && snap.live ? 2000 : 10000);
 }
 
-$("#runs").addEventListener("change", (e) => { current = e.target.value; location.hash = encodeURIComponent(current); selected = null; snap = null; pinnedLog = true; loadRun(); });
+$("#runs").addEventListener("change", (e) => { current = e.target.value; location.hash = encodeURIComponent(current); selected = null; snap = null; loadRun(); });
 window.addEventListener("hashchange", () => { const h = decodeURIComponent(location.hash.slice(1)); if (h && h !== current) { current = h; selected = null; loadRun(); loadRuns(); } });
 
 function focusRound() {
@@ -291,10 +316,10 @@ function renderFlow() {
     <div class="vline dot"></div>
     <div class="loop">
       <div class="loop-head">
-        <span>${n ? `round <b>${n}</b>/${total ?? "?"} · <span class="${phase === "repair" ? "bad" : phase === "seed" ? "k c-coder" : "k c-judge"}">${esc(phase || "")}</span>${builds ? ` · builds on r${builds}` : ""}` : `<span class="dim">no rounds yet</span>`}</span>
+        <span>${n ? `round <b>${n}</b>/${total ?? "?"} · <span class="${phase === "repair" ? "bad" : phase === "seed" ? "k c-coder" : "k c-judge"}">${esc(phase || "")}</span>${builds ? ` · builds on r${builds}` : ""}${roundResult(row)}` : `<span class="dim">no rounds yet</span>`}</span>
         <span class="dim">${inspecting ? `inspecting · <a id="live">back to ${snap.current_round ? "live" : "latest"}</a>` : snap.current_round ? "live round" : "last round"}</span>
       </div>
-      ${n ? renderNodes(n) : `<div class="empty" style="padding:20px 0">${snap.status === "running" ? "checking the baseline before the first model call…" : "no search rounds recorded"}</div>`}
+      ${n ? renderNodes(n) + renderAdvice(n, row) : `<div class="empty" style="padding:20px 0">${snap.status === "running" ? "checking the baseline before the first model call…" : "no search rounds recorded"}</div>`}
     </div>
     <div class="vline dot"></div>
     <div class="box accept c-task">
@@ -304,39 +329,46 @@ function renderFlow() {
     </div>`;
 }
 
-function clipBlock(label, text) {
+function cell(label, text, cls = "") {
   if (!text) return "";
-  const long = text.length > 260;
-  return `<div class="lbl">${label}</div>${long ? `<details><summary><span class="txt clip">${esc(text)}</span><span>▸ more</span></summary></details>` : `<div class="txt">${esc(text)}</div>`}`;
+  const body = text.length > 200 ? `<details><summary><span class="txt clip">${esc(text)}</span><span>▸ more</span></summary></details>` : `<div class="txt">${esc(text)}</div>`;
+  return `<div class="cell"><div class="lbl ${cls}">${label}</div>${body}</div>`;
 }
-
-function renderAdvisor() {
-  const n = focusRound();
-  const row = snap.rounds.find((r) => r.round === n);
-  const head = `<h3>JUDGE · ROUND ${n ?? "—"}</h3><div class="sub">${esc(snap.models.judge.model)} · ${row ? esc(row.phase) : n ? "in progress" : "idle"}</div>`;
-  if (!row) {
-    const pending = snap.steps.filter((s) => s.round === n);
-    return `<aside class="advisor"><div class="scroll">${head}<p class="dim">${pending.length ? "advice for this round is recorded when its candidate is evaluated." : "waiting for the first round."}</p>${renderBestMini()}</div></aside>`;
-  }
-  const d = row.diagnosis || {};
+function advice(d) {
+  return d.critical_issue
+    ? cell("critical issue", d.critical_issue) + cell("fix hint", d.minimal_fix_hint)
+    : cell("bottleneck", d.bottleneck) + cell("method", d.optimization_method) + cell("plan", d.modification_plan);
+}
+function roundResult(row) {
+  if (!row) return "";
   const tags = [row.best ? `<span class="tag ok">best</span>` : "", row.anchor ? `<span class="tag k c-judge">anchor</span>` : "",
     row.eligible ? `<span class="tag ok">eligible</span>` : row.status === "completed" ? `<span class="tag warn">not eligible</span>` : `<span class="tag bad">${esc(row.status)}</span>`].join("");
-  const advice = d.critical_issue
-    ? clipBlock("critical issue", d.critical_issue) + clipBlock("fix hint", d.minimal_fix_hint)
-    : clipBlock("bottleneck", d.bottleneck) + clipBlock("method", d.optimization_method) + clipBlock("plan", d.modification_plan);
-  return `<aside class="advisor"><div class="scroll">${head}
-    <div class="kv"><span>result</span><span>${row.score != null ? `<b>${fmtX(row.score)}</b>` : "—"}${tags}</span></div>
-    ${row.interval ? `<div class="kv dim"><span>95% interval</span><span>${fmtI(row.interval)}</span></div>` : ""}
-    <div class="kv dim"><span>calls · queries</span><span>${(row.calls.judge || 0)} judge · ${(row.calls.coder || 0)} coder · ${row.queries}</span></div>
-    ${row.regressions.length ? `<div class="kv warn"><span>regressed</span><span>${row.regressions.length} case${row.regressions.length > 1 ? "s" : ""}</span></div>` : ""}
-    ${advice || `<div class="lbl">advice</div><p class="dim">${row.phase === "seed" ? "seed round: the coder works from the task alone." : "no judge guidance recorded."}</p>`}
-    ${clipBlock("coder hypothesis", row.hypothesis)}
-    ${row.error ? clipBlock("error", row.error) : ""}
-  </div></aside>`;
+  const regress = row.regressions.length ? ` <span class="warn">${row.regressions.length} case${row.regressions.length > 1 ? "s" : ""} regressed</span>` : "";
+  return ` · ${row.score != null ? `<b>${fmtX(row.score)}</b> <span class="dim">${fmtI(row.interval)}</span>` : ""}${tags}${regress}`;
 }
-function renderBestMini() {
+// The judge's advice for the round on screen, under the nodes it steers.
+function renderAdvice(n, row) {
+  if (row) {
+    const d = row.diagnosis || {};
+    const body = advice(d) || cell("advice", row.phase === "seed" ? "seed round: the coder works from the task alone" : "no judge guidance recorded");
+    return `<div class="advice">${body}${cell("coder hypothesis", row.hypothesis)}${row.error ? cell("error", row.error, "bad") : ""}</div>`;
+  }
+  const live = snap.live_advice && snap.live_advice.round === n ? snap.live_advice : null;
+  if (!live) {
+    const text = roundPhase(n) === "seed" ? "seed round: the coder works from the task alone"
+      : snap.steps.some((s) => s.round === n && s.actor === "judge") || (snap.activity && snap.activity.stage === "profile")
+        ? "the judge's advice appears here when it decides" : "";
+    return text ? `<div class="advice"><div class="state">${text}</div></div>` : "";
+  }
+  const doing = snap.activity && snap.activity.round === n ? snap.activity.stage : null;
+  const state = doing === "coder" ? "the coder is applying this advice" : doing === "evaluate" ? "measuring the candidate" : "decided; waiting for the coder";
+  return `<div class="advice"><div class="state">judge's advice · ${state}${live.base_round ? ` · builds on r${live.base_round}` : ""}</div>${advice(live.diagnosis)}</div>`;
+}
+function renderBest() {
   const b = snap.best;
-  return b ? `<div class="lbl">best so far</div><p>${fmtX(b.score)} at round ${b.round} <span class="dim">${fmtI(b.interval)}</span></p>` : "";
+  return `<section class="bestcard"><h3>BEST SO FAR</h3>
+    ${b ? `<div class="kv"><span>round ${b.round}</span><span><b class="ok">${fmtX(b.score)}</b> <span class="dim">${fmtI(b.interval)}</span></span></div>` : `<p class="dim" style="margin:0;font-size:12px">no eligible candidate yet</p>`}
+    <div id="insight-slot"></div></section>`;
 }
 
 function renderTrajectory() {
@@ -372,16 +404,6 @@ function renderCases() {
       <span class="num">${fmtX(c.speedup)} <span class="k c-${cls}">${word}</span></span><span class="num dim">${ms}</span>`;
   }).join("");
   return `<div class="section"><span class="h"><b>per-case speedup</b> · ${esc(source.label)} · median ${esc(snap.task.metric)} baseline → candidate</span><div class="cases">${lines}</div></div>`;
-}
-
-function renderLog() {
-  const rows = snap.steps.slice(-120).map((s) => {
-    const [cls, name] = ACTOR[s.actor] || ["task", s.actor];
-    const glyph = s.status === "running" ? `<span class="spin">◐</span>` : s.status === "failed" ? "✕" : s.status === "stopped" ? "■" : "";
-    const note = s.note ? `<div class="note"><b>◇ ${esc(s.note.label)}</b> ${esc(s.note.text)}</div>` : "";
-    return `<div class="row ${s.status}"><span class="faint">${clock(s.start)}</span><span class="k c-${cls}">${glyph} ${name}</span><span class="faint">${s.round ? "r" + s.round : ""}</span><span>${esc(s.text)}${note}</span></div>`;
-  }).join("");
-  return `<div class="section"><span class="h"><b>session log</b></span><div class="log" id="log">${rows || '<span class="dim">nothing recorded yet</span>'}</div></div>`;
 }
 
 function meter(label, used, total, cls, fmt = (v) => v) {
@@ -423,21 +445,145 @@ function render() {
   const m = snap.models;
   $("#path").textContent = `${snap.path} — kai-pichu`;
   document.title = `${snap.live ? "● " : ""}${snap.name} · KAI Pichu`;
-  const log = $("#log");
-  if (log) pinnedLog = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
   const msg = snap.message ? `<div class="section" style="border-color:var(--warn)"><span class="h warn">message</span>${esc(snap.message)}</div>` : "";
   $("#app").innerHTML = `
     <div class="roles"><b class="k c-coder">${esc(m.coder.model)}</b> codes<span class="sep">·</span><b class="k c-judge">${esc(m.judge.model)}</b> ${m.shared ? "also " : ""}judges<span class="sep">·</span><b class="k c-sdk">sdk</b> measures<span class="sep">·</span><b class="k c-ncu">ncu</b> ${snap.profile_enabled ? "profiles" : "off"}</div>
     <div class="legend"><span class="c-task">task · harness</span><span class="c-judge">judge · diagnosis</span><span class="c-coder">coder · writes code</span><span class="c-sdk">sdk · measurement</span><span class="c-ncu">ncu · evidence</span></div>
     ${msg}
-    <div class="grid"><section class="flow">${renderFlow()}</section>${renderAdvisor()}</div>
-    ${renderTrajectory()}
-    ${renderCases()}
-    <div class="bottom">${renderLog()}${renderBudget()}</div>`;
-  const newLog = $("#log");
-  if (newLog && pinnedLog) newLog.scrollTop = newLog.scrollHeight;
+    <div class="layout">
+      <div class="col main"><section class="flow">${renderFlow()}</section>${renderTrajectory()}${renderCases()}</div>
+      <div class="col right">${renderBest()}${renderBudget()}</div>
+    </div>`;
+  mountInsight();
   renderStatus();
   tick();
+}
+
+// The headroom map is one persistent node moved into each render's slot, so a
+// new best point slides from its old position instead of being redrawn.
+const card = { el: null, map: null, key: null, axis: "time" };
+function mountInsight() {
+  const slot = $("#insight-slot");
+  if (!slot) return;
+  if (!card.el) {
+    card.el = document.createElement("div");
+    card.el.innerHTML = `<div class="insight headroom"></div><div class="insight progress"></div>`;
+    card.map = card.el.querySelector(".headroom");
+    card.map.addEventListener("mouseover", (e) => highlight(e.target.closest("[data-case]")));
+    card.map.addEventListener("mouseout", () => highlight(null));
+    card.el.querySelector(".progress").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-axis]");
+      if (b) { card.axis = b.dataset.axis; renderProgress(snap.progress); }
+    });
+  }
+  slot.replaceWith(card.el);
+  updateHeadroom(snap.headroom);
+  renderProgress(snap.progress);
+}
+
+function updateHeadroom(h) {
+  const el = card.map;
+  const cases = (h && h.cases) || [];
+  if (!cases.length) {
+    card.key = null;
+    el.innerHTML = `<div class="lbl">headroom</div><p class="dim" style="margin:2px 0 0;font-size:12px">${esc((h && h.note) || "no profile captures yet")}</p>`;
+    return;
+  }
+  const W = 280, H = 236, L = 30, R = 8, T = 8, B = 26;
+  const X = (v) => L + (Math.min(100, Math.max(0, v)) / 100) * (W - L - R);
+  const Y = (v) => T + (1 - Math.min(100, Math.max(0, v)) / 100) * (H - T - B);
+  const at = (p) => [X(p.memory), Y(p.compute)];
+  const key = JSON.stringify(cases.map((c) => [c.case, !!c.baseline]));
+  const rebuilt = key !== card.key;
+  if (rebuilt) {
+    card.key = key;
+    let grid = "";
+    for (let v = 0; v <= 100; v += 20) {
+      grid += `<line class="grid" x1="${X(v)}" x2="${X(v)}" y1="${T}" y2="${H - B}"/><text class="tick" x="${X(v)}" y="${H - B + 11}" text-anchor="middle">${v}</text>`;
+      grid += `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tick" x="${L - 4}" y="${Y(v) + 3}" text-anchor="end">${v}</text>`;
+    }
+    const zones = `
+      <rect class="zone" x="${X(80)}" y="${T}" width="${X(100) - X(80)}" height="${H - B - T}" fill="var(--sdk)"/>
+      <rect class="zone" x="${L}" y="${T}" width="${W - R - L}" height="${Y(80) - T}" fill="var(--task)"/>
+      <rect class="zone" x="${L}" y="${Y(40)}" width="${X(40) - L}" height="${H - B - Y(40)}" fill="var(--faint)"/>
+      <text class="zlabel" x="${L + 4}" y="${T + 10}" fill="var(--task)">compute-bound ≥80%</text>
+      <text class="zlabel" x="${X(97)}" y="${Y(50)}" fill="var(--sdk)" text-anchor="middle" transform="rotate(-90 ${X(97)} ${Y(50)})">memory-bound ≥80%</text>
+      <text class="zlabel" x="${L + 4}" y="${H - B - 5}" fill="var(--dim)">latency-bound</text>`;
+    const pts = cases.map((c, i) => {
+      const b = c.baseline && at(c.baseline), start = b || (c.best && at(c.best));
+      return `<g class="case" data-case="${i}">
+        ${b ? `<circle class="base" cx="${b[0]}" cy="${b[1]}" r="3.6"><title>${esc(c.case)} · baseline</title></circle>` : ""}
+        <path class="move" style="d: path('M${start[0]},${start[1]} L${start[0]},${start[1]}')"/>
+        <g class="pt" style="transform: translate(${start[0]}px, ${start[1]}px)${c.best ? "" : "; display: none"}"><circle r="4"/><text x="6" y="-5">${i + 1}</text><title></title></g>
+      </g>`;
+    }).join("");
+    el.innerHTML = `<div class="lbl">headroom</div><div class="dim" style="font-size:11px">NCU speed of light per search case · ○ baseline → <span class="ok">●</span> <span class="best-label"></span></div>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Compute and memory utilization of baseline and best candidate per search case">
+        ${zones}${grid}<line class="axis" x1="${L}" x2="${L}" y1="${T}" y2="${H - B}"/><line class="axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>
+        ${pts}
+        <text class="tick" x="${(L + W - R) / 2}" y="${H - 2}" text-anchor="middle">memory throughput, % of peak</text>
+        <text class="tick" x="9" y="${(T + H - B) / 2}" text-anchor="middle" transform="rotate(-90 9 ${(T + H - B) / 2})">SM throughput, %</text>
+      </svg><div class="rows"></div><div class="caption"></div>`;
+    void el.getBoundingClientRect();  // commit the start positions so the first move animates
+  }
+  el.querySelector(".best-label").textContent = h.best_round ? `best r${h.best_round}` : "best (none yet)";
+  requestAnimationFrame(() => cases.forEach((c, i) => {
+    const g = el.querySelector(`g.case[data-case="${i}"]`);
+    if (!g || !c.best) return;
+    const [x, y] = at(c.best), b = c.baseline ? at(c.baseline) : [x, y];
+    const pt = g.querySelector(".pt");
+    pt.style.display = "";
+    pt.style.transform = `translate(${x}px, ${y}px)`;
+    pt.querySelector("title").textContent = `${c.case} · best r${h.best_round}: SM ${c.best.compute.toFixed(0)}%, memory ${c.best.memory.toFixed(0)}%, DRAM ${c.best.dram.toFixed(0)}%`;
+    g.querySelector(".move").style.d = `path('M${b[0]},${b[1]} L${x},${y}')`;
+  }));
+  const pct = (a, b) => (a && b ? `${a.toFixed(0)}→${b.toFixed(0)}%` : `${(a ?? b).toFixed(0)}%`);
+  el.querySelector(".rows").innerHTML = cases.map((c, i) => {
+    const b = c.baseline, n = c.best, pick = (k) => pct(b && b[k], n && n[k]);
+    const vals = b || n ? `sm ${pick("compute")} · mem ${pick("memory")} · dram ${pick("dram")}${n ? "" : " (baseline)"}` : "";
+    return `<div data-case="${i}" title="${esc(c.case)}"><span class="ok">${i + 1}</span><span class="name">${esc(c.case)}${c.speedup ? ` <span class="ok">${fmtX(c.speedup)}</span>` : ""}</span><span class="vals">${vals}</span></div>`;
+  }).join("");
+  el.querySelector(".caption").textContent = [h.note, "utilization ≠ speed: read it beside the speedup"].filter(Boolean).join(" · ");
+}
+function highlight(target) {
+  const i = target ? target.dataset.case : null;
+  card.map.querySelectorAll("g.case").forEach((g) => g.classList.toggle("dim", i != null && g.dataset.case !== i));
+}
+
+function renderProgress(series) {
+  const el = card.el.querySelector(".progress");
+  if (!series || !series.length) { el.innerHTML = ""; return; }
+  const byTokens = card.axis === "tokens";
+  const W = 280, H = 96, L = 30, R = 34, T = 8, B = 16;
+  const xv = (p) => (byTokens ? p.tokens : p.t);
+  const xmax = Math.max(1, ...series.map(xv));
+  const ys = series.map((p) => p.score).concat(series.map((p) => p.best)).filter((v) => v != null);
+  const ymax = Math.max(1.2, ...ys) * 1.08, ymin = Math.min(0, ...ys);
+  const X = (v) => L + (v / xmax) * (W - L - R), Y = (v) => T + (1 - (v - ymin) / (ymax - ymin)) * (H - T - B);
+  let d = "", prev = null;
+  series.forEach((p) => {
+    if (p.best == null) return;
+    d += prev == null ? `M${X(xv(p))},${Y(p.best)}` : ` H${X(xv(p))} V${Y(p.best)}`;
+    prev = p.best;
+  });
+  if (prev != null) d += ` H${X(xmax)}`;
+  const dots = series.map((p) => {
+    const tip = `round ${p.round}: ${p.score != null ? fmtX(p.score) : p.status}${p.eligible ? "" : p.score != null ? " (not eligible)" : ""}`;
+    return p.score == null
+      ? `<text x="${X(xv(p))}" y="${H - B - 1}" text-anchor="middle" class="bad" style="font:11px var(--mono);fill:var(--bad)">✕<title>${esc(tip)}</title></text>`
+      : `<circle class="dot" cx="${X(xv(p))}" cy="${Y(p.score)}" r="2.6" fill="var(--${p.eligible ? "sdk" : "faint"})"><title>${esc(tip)}</title></circle>`;
+  }).join("");
+  const last = series[series.length - 1];
+  el.innerHTML = `<div class="lbl" style="display:flex;justify-content:space-between"><span>◇ best so far over ${byTokens ? "tokens" : "time"}</span>
+      <span class="toggle"><button data-axis="time" aria-pressed="${!byTokens}">time</button><button data-axis="tokens" aria-pressed="${byTokens}">tokens</button></span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Best eligible speedup over ${byTokens ? "tokens" : "time"}">
+      <line class="axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>
+      <line class="one" x1="${L}" x2="${W - R}" y1="${Y(1)}" y2="${Y(1)}"/><text class="tick" x="${L - 4}" y="${Y(1) + 3}" text-anchor="end">1×</text>
+      <text class="tick" x="${L - 4}" y="${Y(ymax / 1.08) + 3}" text-anchor="end">${(ymax / 1.08).toFixed(1)}×</text>
+      ${dots}<path class="line" d="${d}"/>
+      ${last.best != null ? `<text x="${W - R + 3}" y="${Y(last.best) + 3}" style="font:12px var(--mono);fill:var(--good)">${fmtX(last.best)}</text>` : ""}
+      <text class="tick" x="${L}" y="${H - 3}">0</text><text class="tick" x="${W - R}" y="${H - 3}" text-anchor="end">${byTokens ? fmtN(xmax) + " tok" : fmtT(xmax)}</text>
+    </svg>`;
 }
 
 function tick() {

@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 
 from .io import parse_object
+from .profile_csv import read_csv
 
 TERMINAL = ("accepted", "not_accepted", "no_improvement", "planned", "error", "invalidated",
             "interrupted", "budget_exhausted", "model_error", "benchmark_error", "resource_busy", "resource_error")
@@ -71,10 +72,12 @@ def _judge_note(body: dict[str, Any]) -> dict[str, Any] | None:
         reply = parse_object(str(body.get("text") or ""))
     except ValueError:
         return None
-    for key, label in (("bottleneck", "bottleneck"), ("critical_issue", "critical issue")):
-        if isinstance(reply.get(key), str) and reply[key].strip():
+    fields = {"bottleneck": ("bottleneck", "optimization_method", "modification_plan"),
+              "critical issue": ("critical_issue", "why_it_matters", "minimal_fix_hint")}
+    for label, keys in fields.items():
+        if isinstance(reply.get(keys[0]), str) and reply[keys[0]].strip():
             base = reply.get("base_round")
-            return {"label": label, "text": _clip(reply[key], 1500),
+            return {"label": label, "diagnosis": {key: reply[key] for key in keys if isinstance(reply.get(key), str)},
                     "base_round": base if isinstance(base, int) and not isinstance(base, bool) else None}
     return None
 
@@ -193,20 +196,7 @@ def _steps(root: Path, state: dict[str, Any]) -> list[dict[str, Any]]:
         capture_dirs = [round_dir] if attempt or (round_dir / "process.log").exists() else \
             [child for child in sorted(round_dir.iterdir()) if child.is_dir()]
         for capture in capture_dirs:
-            result_path = capture / "profile.json"
-            result = _load(result_path)
-            step = {"kind": "profile", "actor": "ncu", "round": index, "attempt": attempt,
-                    "case": None if capture == round_dir else capture.name,
-                    "start": None, "end": None, "status": "running", "detail": ""}
-            if isinstance(result, dict):
-                end = _mtime(result_path)
-                elapsed = float((result.get("process") or {}).get("elapsed_seconds") or 0.0)
-                step.update(end=end, start=end - elapsed,
-                            status="done" if result.get("status") == "profiled" else "failed",
-                            case=step["case"] or (result.get("case_selection") or {}).get("case_id"))
-            else:
-                step["start"] = _mtime(capture)
-            steps.append(step)
+            steps.append(_capture_step(capture, index, attempt=attempt, case=None if capture == round_dir else capture.name))
         for query_path in sorted(round_dir.glob("queries-*.json")):
             record = _load(query_path) or {}
             operations = [str(r.get("operation")) for r in record.get("requests") or [] if isinstance(r, dict)]
@@ -215,15 +205,45 @@ def _steps(root: Path, state: dict[str, Any]) -> list[dict[str, Any]]:
                           "status": "done", "queries": len(operations),
                           "detail": _clip(record.get("question") or ", ".join(operations), 600),
                           "operations": operations})
+    for capture in sorted((root / "profiles" / "baseline").glob("*")):
+        if capture.is_dir():
+            steps.append(_capture_step(capture, None, case=capture.name, baseline=True))
     # In-flight steps are dated by the previous completed step: the loop is sequential.
     steps.sort(key=lambda s: (s["start"] if s["start"] is not None else s.get("end") or float("inf")))
     finished = sorted(s["end"] for s in steps if s["end"] is not None)
     for step in steps:
         if step["end"] is None and step["start"] is None:
             step["start"] = finished[-1] if finished else time.time()
-    steps.sort(key=lambda s: s["start"])
+    # The loop is sequential, so a step ends before the next begins. End times are
+    # recorded file times; a start inferred from a process's elapsed time is not
+    # exact enough to order an evaluation after the model call that preceded it.
+    # An unfinished step that something else followed was abandoned (an interrupted
+    # run that was resumed): only the newest unfinished step can still be running.
+    newest = max((max(s["start"], s["end"] or s["start"]) for s in steps), default=0.0)
+    for step in steps:
+        if step["end"] is None and step["start"] < newest and any(
+                o is not step and max(o["start"], o["end"] or o["start"]) > step["start"] for o in steps):
+            step["status"] = "stopped"
+    steps.sort(key=lambda s: (s["end"] if s["end"] is not None else s["start"] if s["status"] == "stopped" else float("inf"),
+                              s["start"]))
     _assign_rounds(steps, state)
     return steps
+
+
+def _capture_step(capture: Path, index: int | None, *, case: str | None, attempt: bool = False,
+                  baseline: bool = False) -> dict[str, Any]:
+    result_path = capture / "profile.json"
+    result = _load(result_path)
+    step = {"kind": "profile", "actor": "ncu", "round": index, "attempt": attempt, "baseline": baseline,
+            "case": case, "start": None, "end": None, "status": "running", "detail": ""}
+    if isinstance(result, dict):
+        end = _mtime(result_path)
+        elapsed = float((result.get("process") or {}).get("elapsed_seconds") or 0.0)
+        step.update(end=end, start=end - elapsed, status="done" if result.get("status") == "profiled" else "failed",
+                    case=case or (result.get("case_selection") or {}).get("case_id"))
+    else:
+        step["start"] = _mtime(capture)
+    return step
 
 
 def _assign_rounds(steps: list[dict[str, Any]], state: dict[str, Any]) -> None:
@@ -236,6 +256,8 @@ def _assign_rounds(steps: list[dict[str, Any]], state: dict[str, Any]) -> None:
     """
     current, generated = 0, False
     for step in steps:
+        if step.get("baseline"):
+            continue
         if step["kind"] in ("profile", "query"):
             if step["round"] != current:
                 current, generated = step["round"], False
@@ -289,16 +311,131 @@ def _describe(step: dict[str, Any], phases: dict[int, str]) -> str:
         return f"{name} {step['speedup']:.3f}× vs baseline{verdict}"
     if kind == "profile":
         where = step.get("case") or "first case"
-        prefix = "profile last attempt" if step.get("attempt") else "profile"
+        prefix = "profile baseline" if step.get("baseline") else "profile last attempt" if step.get("attempt") else "profile"
         return f"{prefix} {where}" + ("" if step["status"] != "failed" else " · capture failed")
     return f"query ×{step['queries']}: {step['detail']}"
+
+
+SOL_METRICS = {"compute": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+               "memory": "gpu__compute_memory_throughput.avg.pct_of_peak_sustained_elapsed",
+               "dram": "gpu__dram_throughput.avg.pct_of_peak_sustained_elapsed"}
+_sol_cache: dict[Path, tuple[int, dict[str, Any] | None]] = {}
+
+
+def speed_of_light(csv_path: Path) -> dict[str, Any] | None:
+    """NCU's Speed-of-Light utilization for the profiled operator, as % of the GPU's peaks.
+
+    Compute is SM throughput; memory is the busiest memory unit (L1, L2 or
+    DRAM), as NCU's own SOL table reports them. An operator with several
+    launches is averaged by each launch's GPU time.
+    """
+    try:
+        stamp = csv_path.stat().st_mtime_ns
+    except OSError:
+        return None
+    hit = _sol_cache.get(csv_path)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    try:
+        launches = read_csv(csv_path)
+    except (OSError, ValueError):
+        launches = []
+    totals = dict.fromkeys(SOL_METRICS, 0.0)
+    seconds = 0.0
+    for launch in launches:
+        values = {m["name"]: m["value"] for m in launch["metrics"] if isinstance(m["value"], (int, float))}
+        weight = values.get("gpu__time_duration.sum")
+        if not weight or any(name not in values for name in SOL_METRICS.values()):
+            continue
+        seconds += weight
+        for key, name in SOL_METRICS.items():
+            totals[key] += values[name] * weight
+    result = None if seconds <= 0 else {**{key: total / seconds for key, total in totals.items()}, "launches": len(launches)}
+    _sol_cache[csv_path] = (stamp, result)
+    return result
+
+
+def _headroom(root: Path, state: dict[str, Any], profile_enabled: bool) -> dict[str, Any]:
+    """Speed-of-Light utilization per search case: the baseline next to the current best candidate.
+
+    The baseline is captured once after preflight; the best candidate when a
+    later round profiles it as its anchor, matched by the implementation
+    fingerprint every capture records. Utilization is not speed (redundant work
+    keeps units busy too), so the page shows it beside each case's speedup.
+    """
+    profiles = root / "profiles"
+    best_row = state.get("best") or {}
+    baseline: dict[str, dict[str, Any]] = {}
+    best: dict[str, dict[str, Any]] = {}
+    captured = False
+    for path in sorted(profiles.glob("baseline/*/profile.json")):
+        captured = True
+        record = _load(path)
+        if isinstance(record, dict) and record.get("status") == "profiled":
+            sol = speed_of_light(path.parent / "metrics.csv")
+            if sol:
+                baseline[(record.get("case_selection") or {}).get("case_id") or path.parent.name] = sol
+    for path in sorted(profiles.glob("round-*/*/profile.json")) + sorted(profiles.glob("round-*/profile.json")):
+        captured = True
+        record = _load(path)
+        if (best_row and isinstance(record, dict) and record.get("status") == "profiled"
+                and record.get("implementation_fingerprint") == best_row.get("fingerprint")):
+            case = (record.get("case_selection") or {}).get("case_id")
+            sol = speed_of_light(path.parent / "metrics.csv")
+            if case and sol:
+                best[case] = sol
+    speedups = {row["case"]: row["speedup"] for row in _cases(best_row.get("metrics") or {})}
+    cases = [{"case": case, "baseline": baseline.get(case), "best": best.get(case), "speedup": speedups.get(case)}
+             for case in sorted(set(baseline) | set(best))]
+    if not profile_enabled and not captured:
+        note = "profiling is off for this run"
+    elif not captured:
+        note = "waiting for the first capture"
+    elif not baseline:
+        note = "this run did not capture the baseline; runs started now do"
+    elif best_row and not best:
+        note = f"best round {best_row['id'] + 1} is captured when the next round profiles it"
+    else:
+        note = None
+    return {"cases": cases, "note": note, "best_round": best_row["id"] + 1 if best_row else None}
+
+
+def _progress(steps: list[dict[str, Any]], history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each round's result at the moment it was measured, with the best eligible score up to then.
+
+    Time is wall-clock seconds since the run's first recorded step, so an
+    interruption shows as a flat stretch; tokens are those spent by then.
+    """
+    if not steps:
+        return []
+    origin = min(step["start"] for step in steps)
+    ends: dict[int, float] = {}
+    for step in steps:
+        if step["kind"] in ("model", "evaluate") and step.get("round") is not None and step["end"] is not None \
+                and step.get("stage", "evaluate") == "evaluate":
+            ends[step["round"]] = max(ends.get(step["round"], 0.0), step["end"])
+    calls = sorted((step["end"], step.get("tokens_in", 0) + step.get("tokens_out", 0))
+                   for step in steps if step["kind"] == "model" and step["end"] is not None)
+    series, best = [], None
+    for row in history:
+        at = ends.get(row["id"])
+        if at is None:
+            continue
+        metrics = row.get("metrics") or {}
+        eligible = _eligible(metrics)
+        if eligible and row.get("score") is not None:
+            best = max(best or 0.0, row["score"])
+        series.append({"round": row["id"] + 1, "t": at - origin, "tokens": sum(n for end, n in calls if end <= at),
+                       "score": row.get("score"), "status": metrics.get("status"), "eligible": eligible, "best": best})
+    return series
 
 
 def _activity(steps: list[dict[str, Any]], live: bool | None, status: str) -> dict[str, Any] | None:
     running = [s for s in steps if s["status"] == "running"]
     if running and live is not False:
         step = running[-1]
-        stage = {"model": step["actor"], "evaluate": step.get("stage", "evaluate"), "profile": "profile"}[step["kind"]]
+        stage = {"model": step["actor"], "evaluate": step.get("stage", "evaluate"),
+                 "profile": "baseline profile" if step.get("baseline") else "profile"}[step["kind"]]
         index = step.get("round")
         return {"stage": stage, "actor": step["actor"], "round": None if index is None else index + 1, "since": step["start"]}
     if live or (live is None and status == "running"):
@@ -407,8 +544,14 @@ def snapshot(root: Path) -> dict[str, Any]:
                                        "hypothesis": best.get("hypothesis"), "cases": _cases(best.get("metrics") or {})},
         "anchor_round": None if eligible_id is None else eligible_id + 1,
         "acceptance": acceptance_runs,
+        "live_advice": next(({"round": step["round"] + 1, "diagnosis": step["note"]["diagnosis"],
+                              "base_round": step["note"]["base_round"]}
+                             for step in reversed(steps) if step.get("note") and step.get("round") == next_round - 1
+                             and next_round > len(history)), None),
+        "headroom": _headroom(root, state, bool((config.get("profile") or {}).get("enabled"))),
+        "progress": _progress(steps, history),
         "rounds": rounds,
-        "steps": [{**{key: step.get(key) for key in ("kind", "actor", "stage", "start", "end", "status", "text", "tokens_out", "note")},
+        "steps": [{**{key: step.get(key) for key in ("kind", "actor", "stage", "start", "end", "status", "text", "tokens_out")},
                    "round": None if step.get("round") is None else step["round"] + 1}  # 1-based, as the loop prints
                   for step in steps[-STEP_LIMIT:]],
     }
