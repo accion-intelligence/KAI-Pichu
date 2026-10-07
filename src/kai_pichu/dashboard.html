@@ -443,7 +443,7 @@ function renderStatus() {
 
 function render() {
   const m = snap.models;
-  $("#path").textContent = `${snap.path} — kai-pichu`;
+  $("#path").textContent = `kai-pichu dashboard — ${snap.name}`;
   document.title = `${snap.live ? "● " : ""}${snap.name} · KAI Pichu`;
   const msg = snap.message ? `<div class="section" style="border-color:var(--warn)"><span class="h warn">message</span>${esc(snap.message)}</div>` : "";
   $("#app").innerHTML = `

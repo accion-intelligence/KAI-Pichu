@@ -10,12 +10,9 @@ You define what the operator must do, how to check it, what to beat and what to 
 
 **Writing the task is the hard part, so the SDK ships with a skill for Claude Code and Codex.** `kai-pichu skill install`, then tell your agent which operator to wrap: it follows the packaged manual, keeps the test data hidden from the optimizer, and shows you the contract before anything runs.
 
-<picture>
-  <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="docs/assets/kai-pichu-workflow-dark.png">
-  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/kai-pichu-workflow-light.png">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kai-pichu-workflow-dark.svg">
-  <img src="docs/assets/kai-pichu-workflow-light.svg" alt="CUDA kernel engineering workflow: define the task; generate and evaluate candidates; repair failures or diagnose performance with optional NCU feedback; recheck the best eligible candidate after search. Code and experiment records remain inspectable with or without acceptance." width="100%">
-</picture>
+<img src="docs/assets/dashboard-workflow.png" alt="The KAI Pichu dashboard on a finished AWQ INT4 fusion run: the task card; round 10 of 10 with its ncu profile, judge, coder and sdk evaluate steps and the judge's bottleneck, method and plan beneath them; held-out acceptance passing twice at 3.654x and 3.639x; and speedup by round, with two failed rounds and round 9 the best at 3.408x." width="100%">
+
+<sub>`kai-pichu dashboard runs` follows a run live: which role is working, the judge's advice for each round and every round's measured speedup. Shown: a 10-round AWQ INT4 fusion run on an RTX 5070.</sub>
 
 ## How it works
 
@@ -80,7 +77,7 @@ python -m kai_pichu optimize /absolute/path/to/your-task/benchmark.yaml \
   --config optimizer.yaml --output runs/my-operator
 ```
 
-Add `--dry-run` to inspect the plan and frozen task bundle without model calls or GPU workload.
+Add `--dry-run` to inspect the plan and frozen task bundle without model calls or GPU workload. To watch a run, serve the read-only dashboard in another terminal with `python -m kai_pichu dashboard runs` and open `http://127.0.0.1:8765/`.
 
 [Full setup, credentials, profiling, dry-run and resume →](docs/QUICKSTART.md)
 
@@ -168,6 +165,10 @@ A successful command exit alone does not mean a speedup was accepted. `accepted`
 ## Measurements you can inspect
 
 The benchmark SDK checks correctness against your reference, probes the validator with deliberately invalid observations, and compares candidates using paired measurements with confidence intervals. Final acceptance repeats evaluation on the acceptance split; whether its cases differ from search is determined by your adapter.
+
+With profiling on, the run also records where the hardware time went. The dashboard's *best so far* card places each search case by Nsight Compute's Speed-of-Light utilization, the baseline next to the current best candidate, and tracks the best speedup over time. In the AWQ fusion run below, the two-stage baseline sits at the memory-bound edge (about 95% memory throughput); the fused kernel moves every case toward the middle, where it is no longer limited by bandwidth. Utilization is not speed, so read it beside each case's speedup.
+
+<img src="docs/assets/dashboard-headroom.png" alt="Best-so-far card: round 9 at 3.408x. A Speed-of-Light map of SM against memory throughput shows four baseline points near 95% memory and 13 to 19% SM, each joined to its best-candidate point at 44 to 56% on both axes, with per-case speedups from 1.242x to 6.706x; below, the best speedup steps up over 37 minutes to 3.408x, and the budget shows 10 of 10 rounds and 20 of 80 model calls." width="480">
 
 The SDK controls built-in timing; adapter-defined metrics require their own boundary review. File allowlists and integrity checks help preserve the task, but **this is not a security sandbox**. [Measurement rules and execution risks →](docs/MEASUREMENT.md)
 
