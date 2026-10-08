@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/pichu-mascot.png" alt="KAI Pichu mascot" width="150">
+</p>
+
 # KAI Pichu
 
 ### An open-source agent harness for CUDA kernel optimization.
